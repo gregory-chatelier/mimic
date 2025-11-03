@@ -10,14 +10,6 @@ A deterministic, tamper-proof command behavior recorder for developers, CI syste
 
 Later, that voucher can be **replayed** to reproduce the command’s behavior *exactly*, without executing the original command again.
 
-This enables:
-
-*   **Deterministic Testing:** Eliminate flaky tests that rely on external services.
-*   **Offline Development:** Work with APIs and external commands without an internet connection.
-*   **Reproducible Debugging:** Capture the exact behavior of a failing command for later analysis.
-*   **Tamper-Proof Auditing:** Create a verifiable audit trail of command executions.
-*   **CI/CD Acceleration:** Speed up pipelines by replaying long-running commands instead of re-executing them.
-
 ## 2. Core Concepts
 
 `mimic` is built around two core concepts:
@@ -30,7 +22,34 @@ This enables:
 
 For security and auditing, vouchers can be digitally signed using an Ed25519 key pair. This ensures that a voucher has not been tampered with since it was recorded, providing a trustworthy record of command execution.
 
-## 3. Usage
+### Why not just use shell redirection (`>`)?
+
+Simple shell redirection (`>`) only captures **Standard Output (stdout)**. `mimic` captures the entire **Behavioral Contract** of the command, which is essential for building reliable and auditable systems.
+
+| Feature | Shell Redirection (`>`) | `mimic record` / `mimic replay` |
+| :--- | :--- | :--- |
+| **Standard Output (`stdout`)** | ✅ Saved to file. | ✅ Saved to voucher. |
+| **Standard Error (`stderr`)** | ❌ Lost (unless redirected separately). | ✅ Saved to voucher. |
+| **Exit Code** | ❌ Lost (must be checked with `$?`). | ✅ Saved to voucher. |
+| **Timing** | ❌ Lost. | ✅ Saved (total duration, or chunk delays). |
+| **Tamper-Proofing** | ❌ None. File can be edited by anyone. | ✅ **Cryptographically signed** (`--sign`). |
+| **Metadata** | ❌ None (must be manually logged). | ✅ Saved (hostname, user, command, environment). |
+| **Reproducibility** | Only reproduces `stdout`. | Reproduces **stdout, stderr, and exit code** simultaneously. |
+
+The key difference is the ability to **reproduce failure states**. If a command fails, `mimic` records the error message and the non-zero exit code. When replayed, the consuming script behaves *exactly* as if the original command had just failed, making your tests and pipelines truly deterministic.
+
+File redirection gives you data snapshots. `mimic` gives you **executable proofs**.
+
+When you need to:
+
+*   **Prove what happened**
+*   **Reproduce failures reliably**
+*   **Demo with confidence**
+*   **Audit with cryptographic certainty**
+
+...you need behavior recording, not data storage.
+
+## 4. Usage
 
 The command structure is:
 
