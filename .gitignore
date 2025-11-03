@@ -35,8 +35,7 @@ GEMINI.md
 
 var/
 
-WATCHFOR_DESIGN.md
-watchfor.exe
-watchfor
+mimic.exe
+mimic
 
 dist/

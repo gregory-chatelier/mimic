@@ -1,4 +1,4 @@
-# Makefile for the watchfor project
+# Makefile for the mimic project
 
 # Go parameters
 GOCMD=go
@@ -17,7 +17,7 @@ LDFLAGS = -ldflags="-X main.version=$(VERSION)"
 GOLANGCILINT=golangci-lint
 
 # Binary name
-BINARY_NAME=watchfor
+BINARY_NAME=mimic
 
 .PHONY: all test build clean fmt vet lint
 
