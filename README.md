@@ -2,7 +2,7 @@
 
 > Record once. Replay forever.
 
-A deterministic, tamper-proof command behavior recorder for developers, CI systems and educators.
+A deterministic, tamper-proof command behavior recorder for developers, systems and educators.
 
 ## 1. Summary
 
@@ -10,7 +10,7 @@ A deterministic, tamper-proof command behavior recorder for developers, CI syste
 
 Later, that voucher can be **replayed** to reproduce the command’s behavior *exactly*, without executing the original command again.
 
-## 2. Core Concepts
+## 2. Core concepts
 
 `mimic` is built around two core concepts:
 
@@ -18,23 +18,13 @@ Later, that voucher can be **replayed** to reproduce the command’s behavior *e
 
 2.  **Replaying (`mimic replay`):** When you replay a voucher, `mimic` reproduces the recorded behavior *without* running the original command. It prints the same standard output and standard error, and exits with the same exit code.
 
-### Tamper-Proof Vouchers
+### Tamper-proof vouchers
 
 For security and auditing, vouchers can be digitally signed using an Ed25519 key pair. This ensures that a voucher has not been tampered with since it was recorded, providing a trustworthy record of command execution.
 
 ### Why not just use shell redirection (`>`)?
 
 Simple shell redirection (`>`) only captures **Standard Output (stdout)**. `mimic` captures the entire **Behavioral Contract** of the command, which is essential for building reliable and auditable systems.
-
-| Feature | Shell Redirection (`>`) | `mimic record` / `mimic replay` |
-| :--- | :--- | :--- |
-| **Standard Output (`stdout`)** | ✅ Saved to file. | ✅ Saved to voucher. |
-| **Standard Error (`stderr`)** | ❌ Lost (unless redirected separately). | ✅ Saved to voucher. |
-| **Exit Code** | ❌ Lost (must be checked with `$?`). | ✅ Saved to voucher. |
-| **Timing** | ❌ Lost. | ✅ Saved (total duration, or chunk delays). |
-| **Tamper-Proofing** | ❌ None. File can be edited by anyone. | ✅ **Cryptographically signed** (`--sign`). |
-| **Metadata** | ❌ None (must be manually logged). | ✅ Saved (hostname, user, command, environment). |
-| **Reproducibility** | Only reproduces `stdout`. | Reproduces **stdout, stderr, and exit code** simultaneously. |
 
 The key difference is the ability to **reproduce failure states**. If a command fails, `mimic` records the error message and the non-zero exit code. When replayed, the consuming script behaves *exactly* as if the original command had just failed, making your tests and pipelines truly deterministic.
 
@@ -47,7 +37,7 @@ When you need to:
 *   **Demo with confidence**
 *   **Audit with cryptographic certainty**
 
-...you need behavior recording, not data storage.
+...you need behavior recording, not only data storage.
 
 ## 4. Usage
 
@@ -85,92 +75,63 @@ For a full list of flags for each command, use `mimic [command] --help`.
 
 #### `replay` Flags
 
-| Flag                | Description                                      |
-| :------------------ | :----------------------------------------------- |
-| `--validate`        | Verify signature and integrity before replay.    |
-| `--public-key`      | Path to the public key for verification.         |
-| `--preserve-timing` | Simulate original timing delays.                 |
-| `--speed`           | Adjust playback speed (e.g., `2.0` for 2x speed). |
-
-## 4. Installation
-
-This single command will download and install `mimic` to a sensible default location for your system.
-
-**User-level Installation (Recommended for most users):**
-Installs `mimic` to `$HOME/.local/bin` (Linux/macOS) or a user-specific `bin` directory (Windows).
-
-```bash
-curl -sSfL https://raw.githubusercontent.com/gregory-chatelier/mimic/main/install.sh | sh
-```
-
-**System-wide Installation (Requires `sudo`):**
-Installs `mimic` to `/usr/local/bin` (Linux/macOS).
-
-```bash
-sudo sh -c "$(curl -sSfL https://raw.githubusercontent.com/gregory-chatelier/mimic/main/install.sh)"
-```
-
-**Custom Installation Directory:**
-
-You can specify a custom installation directory using the `INSTALL_DIR` environment variable:
-
-```bash
-curl -sSfL https://raw.githubusercontent.com/gregory-chatelier/mimic/main/install.sh | INSTALL_DIR=$HOME/bin sh
-```
+| Flag                | Description                                                  |
+| :------------------ | :----------------------------------------------------------- |
+| `--validate`        | Verify signature and integrity before replay.                |
+| `--public-key`      | Path to the public key for verification.                     |
+| `--preserve-timing` | Simulate original timing delays.                             |
+| `--speed`           | Adjust playback speed (e.g., 0.5 to slow down, 2.0 to speed up). |
+| `--fallback`        | Execute real command to refresh cache if voucher is missing or invalid. |
 
 ## 5. Examples
 
-### Example 1: Offline API Development
+### Example 1: Tamper-proof auditing
 
-Record an API call once, then replay it offline as many times as you need.
-
-```bash
-# Record the API call
-mimic record -o users.vcr -- curl -s https://api.github.com/users/octocat
-
-# Replay it offline
-mimic replay users.vcr | jq '.login'
-# Outputs "octocat" even when offline
-```
-
-### Example 2: Deterministic CI Tests
-
-Replace flaky integration tests with deterministic replays. Store the `.vcr` file in your repository.
+**Scenario:** You need to prove that a critical command (e.g., a database migration, a financial report query, or a security scan) was executed at a specific server time and produced a specific output, and that the record has not been altered.
 
 ```bash
-# In your test setup, record the expected API behavior
-mimic record -o tests/api-fixture.vcr -- npm run test:api
-
-# In your CI pipeline, replay the fixture instead of hitting a live API
-mimic replay tests/api-fixture.vcr
-```
-
-### Example 3: Debugging a Flaky Script
-
-Capture the exact output of a flaky script to reproduce the failure reliably.
-
-```bash
-# Record the flaky script
-mimic record -o flaky-run.vcr -- ./flaky_script.sh
-
-# Replay the exact failure conditions for debugging
-mimic replay flaky-run.vcr > debug.log
-```
-
-### Example 4: Tamper-Proof Compliance Record
-
-Create a verifiable audit trail for compliance purposes.
-
-```bash
-# Generate a key pair
+# 1. Generate a key pair (done once)
 mimic keygen
 
-# Record and sign a sensitive command
-mimic record -o audit.vcr --sign --private-key mimic.key -- psql -c "SELECT * FROM users;"
+# 2. Record and sign the sensitive command
+mimic record -o audit.vcr --sign --private-key mimic.key -- \
+  psql -c "SELECT COUNT(*) FROM production_users;"
 
-# Verify the voucher's integrity later
+# 3. Verify the voucher's integrity later
 mimic verify --public-key mimic.pub audit.vcr
 # ✔ Signature valid (ed25519)
+```
+
+### Example 2: Education
+
+**Scenario:** You are recording a long-running script for a tutorial or demo. You want to preserve the original timing for accuracy but be able to speed up the playback for the audience. The `--speed` flag is applied during replay.
+
+```bash
+# 1. Record the command, preserving the original 10-second delay
+mimic record -o demo_build.vcr --preserve-timing -- \
+  bash -c 'echo "Starting build..."; sleep 10; echo "Build complete."'
+
+# 2. Replay the demo at 2x speed (5-second delay)
+mimic replay demo_build.vcr --preserve-timing --speed 2
+# Output appears with a 5-second delay.
+```
+
+### Example 3: Self-healing caching
+
+**Scenario:** You want to cache the result of a command (e.g., downloading a large machine learning model) for 1 week. If the cache is fresh, use it instantly. If it's expired or missing, run the live command and automatically update the cache.
+
+```bash
+# The first run: Cache is missing. Fallback runs, and a new voucher is created.
+mimic replay model_download.vcr --validate --fallback "wget https://ml.corp/tts-v3.zip" --ttl 1w
+# Output: LIVE download-model command runs, result is saved to model_download.vcr
+
+# Subsequent runs (within 1 week): Cache is fresh.
+mimic replay model_download.vcr --validate --fallback "wget https://ml.corp/tts-v3.zip" --ttl 1w
+# Output: Instant replay from model_download.vcr (Cache Hit)
+
+# Run after 1 week: Cache is stale. Fallback runs again, and the voucher is refreshed.
+mimic replay model_download.vcr --validate --fallback "wget https://ml.corp/tts-v3.zip" --ttl 1w
+# Output: LIVE download-model command runs, result is saved to model_download.vcr (Cache Refresh)
 ```
 
 ## 6. License
