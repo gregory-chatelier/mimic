@@ -14,12 +14,12 @@ import (
 )
 
 var (
-	outputFile string
-	signVoucher bool
-	privateKeyPath string
-	withEnv bool
-	ttl string
-	preserveTiming bool
+	outputFile      string
+	signVoucher     bool
+	privateKeyPath  string
+	withEnv         bool
+	ttl             string
+	preserveTiming  bool
 	prevVoucherPath string
 )
 
@@ -28,7 +28,7 @@ var recordCmd = &cobra.Command{
 	Short: "Record a command's behavior and save it to a .vcr file",
 	Long: `The record command executes a given shell command, captures its standard output, standard error, exit code, and environment metadata,
 and stores it as a cryptographically verifiable voucher (.vcr file).`,
-	Args:  cobra.MinimumNArgs(1),
+	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Find the position of '--' to separate mimic flags from the command to be recorded
 		separatorIdx := -1
@@ -51,6 +51,21 @@ and stores it as a cryptographically verifiable voucher (.vcr file).`,
 			fmt.Println("Error: No command provided to record.")
 			_ = cmd.Help()
 			os.Exit(1)
+		}
+
+		// Input Validation
+		if signVoucher {
+			if _, err := os.Stat(privateKeyPath); os.IsNotExist(err) {
+				fmt.Fprintf(os.Stderr, "Error: Private key file not found at %s. Use 'mimic keygen' to create one.\n", privateKeyPath)
+				os.Exit(1)
+			}
+		}
+
+		if prevVoucherPath != "" {
+			if _, err := os.Stat(prevVoucherPath); os.IsNotExist(err) {
+				fmt.Fprintf(os.Stderr, "Error: Previous voucher file not found at %s.\n", prevVoucherPath)
+				os.Exit(1)
+			}
 		}
 
 		if outputFile == "" {
@@ -98,7 +113,7 @@ and stores it as a cryptographically verifiable voucher (.vcr file).`,
 			}
 
 			v.Signature = voucher.Signature{
-				Algorithm: "ed25519",
+				Algorithm:    "ed25519",
 				SignatureB64: crypto.EncodeBase64(sig),
 			}
 

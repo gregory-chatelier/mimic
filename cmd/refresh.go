@@ -16,10 +16,17 @@ var refreshCmd = &cobra.Command{
 	Short: "Re-run command to refresh expired or invalid voucher",
 	Long: `The refresh command reads an existing .vcr voucher file, extracts the original command,
 re-runs it, and creates a new voucher, overwriting the old one. 
-It can be used to update vouchers that have expired or whose command behavior has changed.`, 
-	Args:  cobra.ExactArgs(1),
+It can be used to update vouchers that have expired or whose command behavior has changed.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		voucherFile := args[0]
+
+		// Input Validation
+		// 1. Validate voucher file existence
+		if _, err := os.Stat(voucherFile); os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "Error: Voucher file not found at %s\n", voucherFile)
+			os.Exit(1)
+		}
 
 		// Read existing voucher
 		data, err := os.ReadFile(voucherFile)

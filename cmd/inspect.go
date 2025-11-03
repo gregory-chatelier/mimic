@@ -14,10 +14,17 @@ import (
 var inspectCmd = &cobra.Command{
 	Use:   "inspect <voucher>",
 	Short: "Show voucher metadata and summary",
-	Long: `The inspect command reads a .vcr voucher file and prints its metadata and summary in a human-readable format.`, 
+	Long:  `The inspect command reads a .vcr voucher file and prints its metadata and summary in a human-readable format.`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		voucherFile := args[0]
+
+		// Input Validation
+		// 1. Validate voucher file existence
+		if _, err := os.Stat(voucherFile); os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "Error: Voucher file not found at %s\n", voucherFile)
+			os.Exit(1)
+		}
 
 		// Read voucher file
 		data, err := os.ReadFile(voucherFile)
@@ -57,7 +64,7 @@ var inspectCmd = &cobra.Command{
 			if time.Since(v.RecordedAt) > v.TTL {
 				fmt.Println("Status: Expired")
 			} else {
-				fmt.Printf("Status: Valid for %s\n", v.TTL - time.Since(v.RecordedAt))
+				fmt.Printf("Status: Valid for %s\n", v.TTL-time.Since(v.RecordedAt))
 			}
 		}
 	},

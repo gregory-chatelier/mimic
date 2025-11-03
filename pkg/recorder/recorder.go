@@ -19,10 +19,10 @@ import (
 
 // TimedChunkWriter is an io.Writer that records the time and content of each write operation.
 type TimedChunkWriter struct {
-	mu         sync.Mutex
-	chunks     []voucher.OutputChunk
-	lastWrite  time.Time
-	buffer     bytes.Buffer
+	mu        sync.Mutex
+	chunks    []voucher.OutputChunk
+	lastWrite time.Time
+	buffer    bytes.Buffer
 }
 
 // NewTimedChunkWriter creates a new TimedChunkWriter.
@@ -125,7 +125,7 @@ func Record(cmdArgs []string, outputFile string, withEnv bool, ttl time.Duration
 	if prevVoucherPath != "" {
 		hash, err := calculateFileSHA256(prevVoucherPath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to calculate hash of previous voucher: %w", err)
+			return nil, fmt.Errorf("failed to calculate SHA256 hash of previous voucher file %s: %w", prevVoucherPath, err)
 		}
 		prevVoucherHash = hash
 	}
@@ -140,13 +140,13 @@ func Record(cmdArgs []string, outputFile string, withEnv bool, ttl time.Duration
 			Cwd:  getCurrentDir(),
 			Env:  envVars,
 		},
-		ExitCode:  exitCode,
+		ExitCode: exitCode,
 		Metadata: voucher.Metadata{
 			Hostname: hostname,
 			User:     user,
 			// TODO: Add SizeBytes and SHA256Output later
 		},
-		TTL: ttl,
+		TTL:                 ttl,
 		PreviousVoucherHash: prevVoucherHash,
 	}
 
@@ -189,13 +189,13 @@ func getCurrentDir() string {
 func calculateFileSHA256(filePath string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("could not open file %s for hashing: %w", filePath, err)
 	}
 	defer file.Close()
 
 	hash := sha256.New()
 	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
+		return "", fmt.Errorf("could not read file %s for hashing: %w", filePath, err)
 	}
 
 	return hex.EncodeToString(hash.Sum(nil)), nil

@@ -1,12 +1,12 @@
 package crypto
 
 import (
-	"crypto/rand"
 	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"os"
-	"encoding/base64"
 )
 
 // GenerateKeyPair generates a new Ed25519 private/public key pair and saves them to the specified paths.

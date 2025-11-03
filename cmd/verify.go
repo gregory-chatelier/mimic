@@ -18,10 +18,23 @@ var verifyCmd = &cobra.Command{
 	Use:   "verify <voucher>",
 	Short: "Verify the authenticity and integrity of a voucher",
 	Long: `The verify command checks the cryptographic signature and integrity of a .vcr voucher file.
-It ensures that the voucher has not been tampered with since it was signed.`, 
-	Args:  cobra.ExactArgs(1),
+It ensures that the voucher has not been tampered with since it was signed.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		voucherFile := args[0]
+
+		// Input Validation
+		// 1. Validate voucher file existence
+		if _, err := os.Stat(voucherFile); os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "Error: Voucher file not found at %s\n", voucherFile)
+			os.Exit(1)
+		}
+
+		// 2. Validate public key file existence
+		if _, err := os.Stat(verifyPublicKeyPath); os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "Error: Public key file not found at %s. Cannot verify signature.\n", verifyPublicKeyPath)
+			os.Exit(1)
+		}
 
 		// Load public key
 		pk, err := crypto.LoadPublicKey(verifyPublicKeyPath)

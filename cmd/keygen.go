@@ -18,9 +18,9 @@ var keygenCmd = &cobra.Command{
 	Short: "Generate a signing key pair for secure vouchers",
 	Long: `The keygen command generates a new Ed25519 private/public key pair.
 The private key is used to sign vouchers, and the public key is used to verify them.
-By default, keys are saved as 'mimic.key' and 'mimic.pub' in the current directory.`, 
+By default, keys are saved as 'mimic.key' and 'mimic.pub' in the current directory.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		
+
 		if keyOutputPath == "" {
 			keyOutputPath = "."
 		}

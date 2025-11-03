@@ -81,8 +81,33 @@ func TestRecord(t *testing.T) {
 		t.Fatalf("Expected an error for nonexistent command, got none")
 	}
 	// Check for a specific error message if possible, or just non-nil error
-	if !strings.Contains(err.Error(), "failed to run command") && !strings.Contains(err.Error(),"executable file not found"){
+	if !strings.Contains(err.Error(), "failed to run command") && !strings.Contains(err.Error(), "executable file not found") {
 		t.Errorf("Unexpected error for nonexistent command: %v", err)
+	}
+
+	// Test case 4: With environment variables
+	os.Setenv("MIMIC_TEST_VAR", "hello env")
+	defer os.Unsetenv("MIMIC_TEST_VAR")
+	cmdArgs4 := []string{"bash", "-c", "echo $MIMIC_TEST_VAR"}
+	voucher4, err := recorder.Record(cmdArgs4, outputFile, true, 0, false, "")
+	if err != nil {
+		t.Fatalf("Record with env failed: %v", err)
+	}
+	if voucher4.Command.Env["MIMIC_TEST_VAR"] != "hello env" {
+		t.Errorf("Expected env var MIMIC_TEST_VAR to be 'hello env', got '%s'", voucher4.Command.Env["MIMIC_TEST_VAR"])
+	}
+
+	// Test case 5: With timing preservation
+	cmdArgs5 := []string{"bash", "-c", "echo -n a; sleep 0.1; echo -n b"}
+	voucher5, err := recorder.Record(cmdArgs5, outputFile, false, 0, true, "")
+	if err != nil {
+		t.Fatalf("Record with timing failed: %v", err)
+	}
+	if len(voucher5.Stdout) < 2 {
+		t.Fatalf("Expected at least 2 stdout chunks for timing test, got %d", len(voucher5.Stdout))
+	}
+	if voucher5.Stdout[1].DelayMs < 100 {
+		t.Errorf("Expected at least 100ms delay between chunks, got %dms", voucher5.Stdout[1].DelayMs)
 	}
 }
 
