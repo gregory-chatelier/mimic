@@ -22,6 +22,200 @@ var (
 	useFallback          bool
 )
 
+// RunReplayCommand contains the core logic for the replay command,
+// returning the exit code and an error, rather than calling os.Exit directly.
+func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validateVoucher bool, publicKeyPath string, privateKeyPath string, replayPreserveTiming bool, speed float64, useFallback bool) (int, error) {
+	isCacheStale := false
+	isSecurityFailure := false
+
+	// 1. Validate speed flag
+	if speed <= 0 {
+		return 1, fmt.Errorf("the --speed multiplier must be greater than 0")
+	}
+
+	// 2. Validate public key path if validation is requested
+	if validateVoucher {
+		if publicKeyPath == "" {
+			return 1, fmt.Errorf("--validate requires a --public-key path to be specified")
+		}
+		if _, err := os.Stat(publicKeyPath); os.IsNotExist(err) {
+			return 1, fmt.Errorf("public key file not found at '%s'", publicKeyPath)
+		}
+	}
+
+	// 3. Validate private key path if fallback re-signing is requested
+	if useFallback && privateKeyPath != "" {
+		if _, err := os.Stat(privateKeyPath); os.IsNotExist(err) {
+			return 1, fmt.Errorf("private key file not found at '%s' for re-signing on fallback", privateKeyPath)
+		}
+	}
+
+	// --- Check for valid voucher ---
+
+	// Try to read the file first
+	data, err := os.ReadFile(voucherFile)
+	if os.IsNotExist(err) {
+		isCacheStale = true
+	} else if err != nil {
+		return 1, fmt.Errorf("failed to read voucher file %s: %w", voucherFile, err)
+	}
+
+	var v voucher.Voucher
+	if !isCacheStale {
+		if err := yaml.Unmarshal(data, &v); err != nil {
+			// File exists but is malformed, treat as cache stale if fallback is available
+			fmt.Fprintf(os.Stderr, "Warning: Voucher file '%s' is malformed (%v). Treating as cache stale.\n", voucherFile, err)
+			isCacheStale = true
+		}
+
+		// Perform validation if required
+		if validateVoucher && !isCacheStale {
+			// Load public key (already validated existence above)
+			pk, err := crypto.LoadPublicKey(publicKeyPath)
+			if err != nil {
+				// This error should ideally not happen if os.Stat passed, but good to check
+				return 1, fmt.Errorf("error loading public key for validation: %w", err)
+			}
+
+			// Check TTL
+			if v.TTL > 0 && time.Since(v.RecordedAt) > v.TTL {
+				isCacheStale = true
+				fmt.Fprintf(os.Stderr, "Warning: Voucher has expired (Recorded at %s, TTL %s). Treating as cache stale.\n", v.RecordedAt.Format(time.RFC3339), v.TTL.String())
+			}
+
+			// Check signature (Security Critical Check)
+			if !isCacheStale { // Only check signature if not already stale from TTL
+				if v.Signature.SignatureB64 == "" {
+					isSecurityFailure = true
+					return 1, fmt.Errorf("voucher is not signed, but validation was requested")
+				} else {
+					signatureBytes, err := crypto.DecodeBase64(v.Signature.SignatureB64)
+					if err != nil {
+						return 1, fmt.Errorf("error decoding signature for validation: %w", err)
+					}
+					verifiableVoucher := v
+					verifiableVoucher.Signature = voucher.Signature{}
+					verifiableData, _ := yaml.Marshal(verifiableVoucher)
+
+					if !crypto.VerifySignature(pk, verifiableData, signatureBytes) {
+						isSecurityFailure = true
+						return 1, fmt.Errorf("voucher signature is invalid! This indicates tampering")
+					}
+				}
+			}
+
+			if isSecurityFailure {
+				return 1, fmt.Errorf("security validation failed") // Exit immediately on security failure
+			}
+			
+			if !isCacheStale {
+				fmt.Fprintln(os.Stderr, "Voucher validated successfully.")
+			}
+		}
+	}
+
+	// --- Fallback Logic ---
+	if isCacheStale {
+		if useFallback {
+			if len(fallbackCmdToExecute) == 0 {
+				return 1, fmt.Errorf("--fallback flag used, but no command provided after '--'")
+			}
+			
+			// Join the command for logging purposes
+			fallbackCommandStr := strings.Join(fallbackCmdToExecute, " ")
+			fmt.Fprintf(os.Stderr, "Cache is stale or missing. Executing fallback command: %s\n", fallbackCommandStr)
+
+			// 1. Prepare to record the fallback command
+			tmpVCRFile, err := os.CreateTemp(os.TempDir(), "mimic-fallback-*.vcr")
+			if err != nil {
+				return 1, fmt.Errorf("error creating temporary file for fallback recording: %w", err)
+			}
+			tmpVCRFile.Close()
+			defer os.Remove(tmpVCRFile.Name())
+
+			// Determine if timing should be preserved for the fallback
+			recordFallbackPreserveTiming := replayPreserveTiming // Use replay's preserve timing setting for fallback recording
+
+			var envVarsToCapture []string
+			if v.Command.Env != nil && len(v.Command.Env) > 0 {
+				envVarsToCapture = []string{} // Capture all env vars if original had them
+			}
+
+			// Record the command using the recorder package
+			_, err = recorder.Record(fallbackCmdToExecute, tmpVCRFile.Name(), envVarsToCapture, v.TTL, recordFallbackPreserveTiming, "", []string{})
+			
+			if err != nil {
+				return 1, fmt.Errorf("error recording fallback command: %w", err)
+			}
+			
+			// 2. Overwrite the original voucher file with the new recording
+			finalData, err := os.ReadFile(tmpVCRFile.Name())
+			if err != nil {
+				return 1, fmt.Errorf("error reading temporary fallback voucher: %w", err)
+			}
+
+			// Implement re-signing logic if a private key is provided
+			if privateKeyPath != "" {
+				// Load the newly recorded voucher from the temporary file
+				var newVoucher voucher.Voucher
+				if err := yaml.Unmarshal(finalData, &newVoucher); err != nil {
+					return 1, fmt.Errorf("error unmarshalling temporary fallback voucher for signing: %w", err)
+				}
+
+				// Load private key (already validated existence above)
+				sk, err := crypto.LoadPrivateKey(privateKeyPath)
+				if err != nil {
+					// This error should ideally not happen if os.Stat passed, but good to check
+					return 1, fmt.Errorf("error loading private key for re-signing: %w", err)
+				}
+
+				// Sign the voucher
+				signedData, err := crypto.SignVoucher(newVoucher, sk)
+				if err != nil {
+					return 1, fmt.Errorf("error signing fallback voucher: %w", err)
+				}
+				finalData = signedData
+				fmt.Fprintln(os.Stderr, "Voucher successfully re-signed.")
+			}
+			
+			if err := os.WriteFile(voucherFile, finalData, 0644); err != nil {
+				return 1, fmt.Errorf("error writing new voucher to %s: %w", voucherFile, err)
+			}
+			fmt.Fprintf(os.Stderr, "Voucher cache refreshed from fallback command and saved to %s\n", voucherFile)
+			
+			// 3. Replay from the newly written voucher
+			replayExitCode, err := replayer.Replay(voucherFile, replayPreserveTiming, speed)
+			if err != nil {
+				return 1, fmt.Errorf("error replaying newly recorded voucher: %w", err)
+			}
+			return replayExitCode, nil
+		} else {
+			// No fallback command provided, exit with an error
+			originalError := "Voucher is missing or failed validation/TTL check."
+			if os.IsNotExist(err) {
+				originalError = fmt.Sprintf("Voucher file not found at '%s'", voucherFile)
+			} else if err != nil {
+				originalError = fmt.Sprintf("Voucher file '%s' is unreadable or malformed", voucherFile)
+			}
+
+			return 1, fmt.Errorf("%s", originalError)
+		}
+	}
+
+	// --- Default Replay (Voucher is valid) ---
+	if !isCacheStale && !useFallback {
+		fmt.Fprintln(os.Stderr, "Voucher is valid. Replaying from cache.")
+	} else if !isCacheStale && useFallback {
+		fmt.Fprintln(os.Stderr, "Voucher is valid. Replaying from cache (Fallback ignored).")
+	}
+
+	replayExitCode, err := replayer.Replay(voucherFile, replayPreserveTiming, speed)
+	if err != nil {
+		return 1, fmt.Errorf("error replaying voucher: %w", err)
+	}
+	return replayExitCode, nil
+}
+
 var replayCmd = &cobra.Command{
 	Use:   "replay [flags] <voucher> [-- <fallback command> [args...]]",
 	Short: "Replay a recorded command behavior",
@@ -33,8 +227,6 @@ if the voucher is missing, expired, or malformed.`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		voucherFile := args[0]
-		isCacheStale := false
-		isSecurityFailure := false
 
 		// 1. Separate mimic flags from the fallback command
 		separatorIdx := -1
@@ -45,184 +237,16 @@ if the voucher is missing, expired, or malformed.`,
 			}
 		}
 
-		var fallbackCmdToRecord []string
+		var fallbackCmdToExecute []string
 		if separatorIdx != -1 {
-			fallbackCmdToRecord = args[separatorIdx+1:]
-		}
-		
-		// 2. Validate speed flag
-		if speed <= 0 {
-			fmt.Fprintf(os.Stderr, "Error: The --speed multiplier must be greater than 0.\n")
-			os.Exit(1)
+			fallbackCmdToExecute = args[separatorIdx+1:]
 		}
 
-		// --- Check for valid voucher ---
-
-		// Try to read the file first
-		data, err := os.ReadFile(voucherFile)
-		if os.IsNotExist(err) {
-			isCacheStale = true
-		} else if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: Failed to read voucher file %s: %v\n", voucherFile, err)
-			os.Exit(1)
-		}
-
-		var v voucher.Voucher
-		if !isCacheStale {
-			if err := yaml.Unmarshal(data, &v); err != nil {
-				// File exists but is malformed, treat as cache stale if fallback is available
-				fmt.Fprintf(os.Stderr, "Warning: Voucher file is malformed (%v). Treating as cache stale.\n", err)
-				isCacheStale = true
-			}
-
-			// Perform validation if required
-			if validateVoucher && !isCacheStale {
-				// Load public key
-				pk, err := crypto.LoadPublicKey(publicKeyPath)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error loading public key for validation: %v\n", err)
-					os.Exit(1)
-				}
-
-				// Check TTL
-				if v.TTL > 0 && time.Since(v.RecordedAt) > v.TTL {
-					isCacheStale = true
-					fmt.Fprintf(os.Stderr, "Warning: Voucher has expired (Recorded at %s, TTL %s). Treating as cache stale.\n", v.RecordedAt.Format(time.RFC3339), v.TTL.String())
-				}
-
-				// Check signature (Security Critical Check)
-				if !isCacheStale {
-					if v.Signature.SignatureB64 == "" {
-						isSecurityFailure = true
-						fmt.Fprintf(os.Stderr, "Error: Voucher is not signed, but validation was requested. Failing.\n")
-					} else {
-						signatureBytes, err := crypto.DecodeBase64(v.Signature.SignatureB64)
-						if err != nil {
-							fmt.Fprintf(os.Stderr, "Error decoding signature for validation: %v\n", err)
-							os.Exit(1)
-						}
-						verifiableVoucher := v
-						verifiableVoucher.Signature = voucher.Signature{}
-						verifiableData, _ := yaml.Marshal(verifiableVoucher)
-
-						if !crypto.VerifySignature(pk, verifiableData, signatureBytes) {
-							isSecurityFailure = true
-							fmt.Fprintf(os.Stderr, "Error: Voucher signature is invalid! This indicates tampering. Failing.\n")
-						}
-					}
-				}
-
-				if isSecurityFailure {
-					os.Exit(1) // Exit immediately on security failure
-				}
-				
-				if !isCacheStale {
-					fmt.Println("Voucher validated successfully.")
-				}
-			}
-		}
-
-		// --- Fallback Logic ---
-		if isCacheStale {
-			if useFallback {
-				if len(fallbackCmdToRecord) == 0 {
-					fmt.Fprintf(os.Stderr, "Error: --fallback flag used, but no command provided after '--'.\n")
-					os.Exit(1)
-				}
-				
-				// Join the command for logging purposes
-				fallbackCommandStr := strings.Join(fallbackCmdToRecord, " ")
-				fmt.Printf("Cache is stale or missing. Executing fallback command: %s\n", fallbackCommandStr)
-
-				// 1. Prepare to record the fallback command
-				tmpVCRFile, err := os.CreateTemp(os.TempDir(), "mimic-fallback-*.vcr")
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error creating temporary file for fallback recording: %v\n", err)
-					os.Exit(1)
-				}
-				tmpVCRFile.Close()
-				defer os.Remove(tmpVCRFile.Name())
-
-				// Record the command using the recorder package
-				_, err = recorder.Record(fallbackCmdToRecord, tmpVCRFile.Name(), v.Command.Env != nil, v.TTL, replayPreserveTiming, "", []string{})
-				
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error recording fallback command: %v\n", err)
-					os.Exit(1)
-				}
-				
-				// 2. Overwrite the original voucher file with the new recording
-				finalData, err := os.ReadFile(tmpVCRFile.Name())
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error reading temporary fallback voucher: %v\n", err)
-					os.Exit(1)
-				}
-
-				// Implement re-signing logic if a private key is provided
-				if privateKeyPath != "" {
-					// Load the newly recorded voucher from the temporary file
-					var newVoucher voucher.Voucher
-					if err := yaml.Unmarshal(finalData, &newVoucher); err != nil {
-						fmt.Fprintf(os.Stderr, "Error unmarshalling temporary fallback voucher for signing: %v\n", err)
-						os.Exit(1)
-					}
-
-					// Load private key
-					sk, err := crypto.LoadPrivateKey(privateKeyPath)
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "Error loading private key for re-signing: %v\n", err)
-						os.Exit(1)
-					}
-
-					// Sign the voucher
-					signedData, err := crypto.SignVoucher(newVoucher, sk)
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "Error signing fallback voucher: %v\n", err)
-						os.Exit(1)
-					}
-					finalData = signedData
-					fmt.Println("Voucher successfully re-signed.")
-				}
-				
-				if err := os.WriteFile(voucherFile, finalData, 0644); err != nil {
-					fmt.Fprintf(os.Stderr, "Error writing new voucher to %s: %v\n", voucherFile, err)
-					os.Exit(1)
-				}
-				fmt.Printf("Voucher cache refreshed from fallback command and saved to %s\n", voucherFile)
-				
-				// 3. Replay from the newly written voucher
-				err = replayer.Replay(voucherFile, replayPreserveTiming, speed)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error replaying newly recorded voucher: %v\n", err)
-					os.Exit(1)
-				}
-				// os.Exit called inside Replay
-
-			} else {
-				// No fallback command provided, exit with an error
-				originalError := "Voucher is missing or failed validation/TTL check."
-				if os.IsNotExist(err) {
-					originalError = fmt.Sprintf("Voucher file not found at %s.", voucherFile)
-				}
-
-
-				fmt.Fprintf(os.Stderr, "Error: %s\n", originalError)
-				os.Exit(1)
-			}
-		}
-
-		// --- Default Replay (Voucher is valid) ---
-		if !isCacheStale && !useFallback {
-			fmt.Println("Voucher is valid. Replaying from cache.")
-		} else if !isCacheStale && useFallback {
-			fmt.Println("Voucher is valid. Replaying from cache (Fallback ignored).")
-		}
-
-		err = replayer.Replay(voucherFile, replayPreserveTiming, speed)
+		exitCode, err := RunReplayCommand(voucherFile, fallbackCmdToExecute, validateVoucher, publicKeyPath, privateKeyPath, replayPreserveTiming, speed, useFallback)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error replaying voucher: %v\n", err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		}
+		os.Exit(exitCode)
 	},
 }
 

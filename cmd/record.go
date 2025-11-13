@@ -82,7 +82,12 @@ and stores it as a cryptographically verifiable voucher (.vcr file).`,
 			durationTTL = d
 		}
 
-		v, err := recorder.Record(cmdToRecord, outputFile, withEnv, durationTTL, preserveTiming, prevVoucherPath, redactPatterns)
+		var envVarsToCapture []string
+		if withEnv {
+			envVarsToCapture = []string{} // Empty slice means capture all
+		}
+
+		v, err := recorder.Record(cmdToRecord, outputFile, envVarsToCapture, durationTTL, preserveTiming, prevVoucherPath, redactPatterns)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error recording command: %v\n", err)
 			os.Exit(1)

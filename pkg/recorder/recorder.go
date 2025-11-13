@@ -97,7 +97,7 @@ func RedactEnvVars(envVars map[string]string, patterns []string) (map[string]str
 }
 
 // Record executes a command, captures its behavior, and returns a Voucher.
-func Record(cmdArgs []string, outputFile string, withEnv bool, ttl time.Duration, preserveTiming bool, prevVoucherPath string, redactPatterns []string) (*voucher.Voucher, error) {
+func Record(cmdArgs []string, outputFile string, envVarsToCapture []string, ttl time.Duration, preserveTiming bool, prevVoucherPath string, redactPatterns []string) (*voucher.Voucher, error) {
 	// Separate command and arguments
 	name := cmdArgs[0]
 	args := cmdArgs[1:]
@@ -143,16 +143,26 @@ func Record(cmdArgs []string, outputFile string, withEnv bool, ttl time.Duration
 		user, _ = os.LookupEnv("USERNAME") // For Windows
 	}
 
-	// Get environment variables if withEnv is true
+	// Get environment variables
 	envVars := make(map[string]string)
-	if withEnv {
+	if len(envVarsToCapture) > 0 {
+		// Capture only specified environment variables
+		for _, key := range envVarsToCapture {
+			if val, ok := os.LookupEnv(key); ok {
+				envVars[key] = val
+			}
+		}
+	} else {
+		// Capture all environment variables if envVarsToCapture is empty
 		for _, env := range os.Environ() {
 			parts := strings.SplitN(env, "=", 2)
 			if len(parts) == 2 {
 				envVars[parts[0]] = parts[1]
 			}
 		}
-		
+	}
+	
+	if len(redactPatterns) > 0 {
 		var redactErr error
 		envVars, redactErr = RedactEnvVars(envVars, redactPatterns)
 		if redactErr != nil {
@@ -212,7 +222,7 @@ func Record(cmdArgs []string, outputFile string, withEnv bool, ttl time.Duration
 		if err := os.WriteFile(outputFile, data, 0644); err != nil {
 			return nil, fmt.Errorf("failed to write voucher to file %s: %v\n", outputFile, err)
 		}
-		fmt.Printf("Voucher recorded to %s\n", outputFile)
+		fmt.Fprintf(os.Stderr, "Voucher recorded to %s\n", outputFile)
 	}
 
 	return v, nil

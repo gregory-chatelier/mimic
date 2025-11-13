@@ -51,7 +51,12 @@ It can be used to update vouchers that have expired or whose command behavior ha
 		// For simplicity in this implementation, we will use the default settings for the new recording.
 		// A more advanced implementation could parse all settings from the old voucher.
 
-		_, err = recorder.Record(cmdToRecord, voucherFile, len(v.Command.Env) > 0, v.TTL, len(v.Stdout) > 1 || len(v.Stderr) > 1, voucherFile, []string{})
+		var envVarsToCapture []string
+		if v.Command.Env != nil && len(v.Command.Env) > 0 {
+			envVarsToCapture = []string{} // Capture all env vars if original had them
+		}
+
+		_, err = recorder.Record(cmdToRecord, voucherFile, envVarsToCapture, v.TTL, len(v.Stdout) > 1 || len(v.Stderr) > 1, voucherFile, []string{})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error refreshing voucher: %v\n", err)
 			os.Exit(1)
