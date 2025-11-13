@@ -19,21 +19,38 @@ var (
 	publicKeyPath        string
 	replayPreserveTiming bool
 	speed                float64
-	fallbackCommand      string
+	useFallback          bool
 )
 
 var replayCmd = &cobra.Command{
-	Use:   "replay [flags] <voucher>",
+	Use:   "replay [flags] <voucher> [-- <fallback command> [args...]]",
 	Short: "Replay a recorded command behavior",
 	Long: `The replay command reads a .vcr file, emits its recorded standard output and standard error,
-and exits with the recorded exit code, reproducing the original command's behavior.`, 
-	Args: cobra.ExactArgs(1),
+and exits with the recorded exit code, reproducing the original command's behavior.
+
+If the --fallback flag is used, the command following the '--' separator will be executed
+if the voucher is missing, expired, or malformed.`,
+	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		voucherFile := args[0]
 		isCacheStale := false
 		isSecurityFailure := false
 
-		// 1. Validate speed flag
+		// 1. Separate mimic flags from the fallback command
+		separatorIdx := -1
+		for i, arg := range args {
+			if arg == "--" {
+				separatorIdx = i
+				break
+			}
+		}
+
+		var fallbackCmdToRecord []string
+		if separatorIdx != -1 {
+			fallbackCmdToRecord = args[separatorIdx+1:]
+		}
+		
+		// 2. Validate speed flag
 		if speed <= 0 {
 			fmt.Fprintf(os.Stderr, "Error: The --speed multiplier must be greater than 0.\n")
 			os.Exit(1)
@@ -107,8 +124,15 @@ and exits with the recorded exit code, reproducing the original command's behavi
 
 		// --- Fallback Logic ---
 		if isCacheStale {
-			if fallbackCommand != "" {
-				fmt.Printf("Cache is stale or missing. Executing fallback command: %s\n", fallbackCommand)
+			if useFallback {
+				if len(fallbackCmdToRecord) == 0 {
+					fmt.Fprintf(os.Stderr, "Error: --fallback flag used, but no command provided after '--'.\n")
+					os.Exit(1)
+				}
+				
+				// Join the command for logging purposes
+				fallbackCommandStr := strings.Join(fallbackCmdToRecord, " ")
+				fmt.Printf("Cache is stale or missing. Executing fallback command: %s\n", fallbackCommandStr)
 
 				// 1. Prepare to record the fallback command
 				tmpVCRFile, err := os.CreateTemp(os.TempDir(), "mimic-fallback-*.vcr")
@@ -119,17 +143,8 @@ and exits with the recorded exit code, reproducing the original command's behavi
 				tmpVCRFile.Close()
 				defer os.Remove(tmpVCRFile.Name())
 
-				// Split the fallback command into arguments for the external shell
-				shell := "sh"
-				shellArg := "-c"
-				if os.Getenv("SHELL") == "" && strings.Contains(os.Getenv("OS"), "Windows") {
-					shell = "powershell.exe"
-					shellArg = "-Command"
-				}
-				
 				// Record the command using the recorder package
-				cmdArgs := []string{shell, shellArg, fallbackCommand}
-				_, err = recorder.Record(cmdArgs, tmpVCRFile.Name(), v.Command.Env != nil, v.TTL, replayPreserveTiming, "")
+				_, err = recorder.Record(fallbackCmdToRecord, tmpVCRFile.Name(), v.Command.Env != nil, v.TTL, replayPreserveTiming, "", []string{})
 				
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Error recording fallback command: %v\n", err)
@@ -143,13 +158,37 @@ and exits with the recorded exit code, reproducing the original command's behavi
 					os.Exit(1)
 				}
 
-				// TODO: Implement re-signing logic if required. This requires a dedicated --private-key flag on replay.
+				// Implement re-signing logic if a private key is provided
+				if privateKeyPath != "" {
+					// Load the newly recorded voucher from the temporary file
+					var newVoucher voucher.Voucher
+					if err := yaml.Unmarshal(finalData, &newVoucher); err != nil {
+						fmt.Fprintf(os.Stderr, "Error unmarshalling temporary fallback voucher for signing: %v\n", err)
+						os.Exit(1)
+					}
+
+					// Load private key
+					sk, err := crypto.LoadPrivateKey(privateKeyPath)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "Error loading private key for re-signing: %v\n", err)
+						os.Exit(1)
+					}
+
+					// Sign the voucher
+					signedData, err := crypto.SignVoucher(newVoucher, sk)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "Error signing fallback voucher: %v\n", err)
+						os.Exit(1)
+					}
+					finalData = signedData
+					fmt.Println("Voucher successfully re-signed.")
+				}
 				
 				if err := os.WriteFile(voucherFile, finalData, 0644); err != nil {
 					fmt.Fprintf(os.Stderr, "Error writing new voucher to %s: %v\n", voucherFile, err)
 					os.Exit(1)
 				}
-				fmt.Printf("Voucher cache refreshed from fallback command and saved to %s.\n", voucherFile)
+				fmt.Printf("Voucher cache refreshed from fallback command and saved to %s\n", voucherFile)
 				
 				// 3. Replay from the newly written voucher
 				err = replayer.Replay(voucherFile, replayPreserveTiming, speed)
@@ -173,9 +212,9 @@ and exits with the recorded exit code, reproducing the original command's behavi
 		}
 
 		// --- Default Replay (Voucher is valid) ---
-		if !isCacheStale && fallbackCommand == "" {
+		if !isCacheStale && !useFallback {
 			fmt.Println("Voucher is valid. Replaying from cache.")
-		} else if !isCacheStale && fallbackCommand != "" {
+		} else if !isCacheStale && useFallback {
 			fmt.Println("Voucher is valid. Replaying from cache (Fallback ignored).")
 		}
 
@@ -192,7 +231,8 @@ func init() {
 
 	replayCmd.Flags().BoolVar(&validateVoucher, "validate", false, "Verify signature and integrity before replay")
 	replayCmd.Flags().StringVar(&publicKeyPath, "public-key", "mimic.pub", "Path to the public key file for verification")
+	replayCmd.Flags().StringVar(&privateKeyPath, "private-key", "", "Path to the private key file for re-signing on fallback")
 	replayCmd.Flags().BoolVar(&replayPreserveTiming, "preserve-timing", false, "Simulate original timing delays")
 	replayCmd.Flags().Float64Var(&speed, "speed", 1.0, "Adjust playback speed (e.g., 2x, 0.5x)")
-	replayCmd.Flags().StringVar(&fallbackCommand, "fallback", "", "Execute real command to refresh cache if voucher is missing or invalid")
+	replayCmd.Flags().BoolVar(&useFallback, "fallback", false, "Execute real command to refresh cache if voucher is missing or invalid")
 }

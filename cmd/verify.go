@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/gregory-chatelier/mimic/pkg/crypto"
 	"github.com/gregory-chatelier/mimic/pkg/voucher"
@@ -83,9 +86,27 @@ It ensures that the voucher has not been tampered with since it was signed.`,
 			os.Exit(1)
 		}
 
-		// TODO: Add SHA256 checksum matches and Voucher not expired checks later
-		fmt.Println("✔ SHA256 checksum matches (TODO)")
-		fmt.Println("✔ Voucher not expired (TODO)")
+		// Check SHA256 checksum
+		hasher := sha256.New()
+		hasher.Write(verifiableData)
+		calculatedChecksum := hex.EncodeToString(hasher.Sum(nil))
+
+		if calculatedChecksum == v.Signature.ChecksumSHA256 {
+			fmt.Println("✔ SHA256 checksum matches")
+		} else {
+			fmt.Fprintf(os.Stderr, "Error: SHA256 checksum mismatch! Expected %s, calculated %s.\n", v.Signature.ChecksumSHA256, calculatedChecksum)
+			os.Exit(1)
+		}
+
+		// Check TTL
+		if v.TTL > 0 {
+			expirationTime := v.RecordedAt.Add(v.TTL)
+			if time.Now().After(expirationTime) {
+				fmt.Fprintf(os.Stderr, "Error: Voucher expired on %s (TTL: %s).\n", expirationTime.Format(time.RFC3339), v.TTL.String())
+				os.Exit(1)
+			}
+		}
+		fmt.Println("✔ Voucher not expired")
 	},
 }
 

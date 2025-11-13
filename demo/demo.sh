@@ -96,18 +96,18 @@ run_cmd "rm -f $DEMO_DIR/cache_test.vcr"
 
 # 12a. First run: Cache miss, executes fallback, records new voucher
 echo "\n--- 12a. First run: Cache Miss (Voucher missing) ---"
-run_cmd "./$APP_NAME replay $DEMO_DIR/cache_test.vcr --fallback \"echo 'LIVE RUN: Cache was missing, now recorded.'\""
+run_cmd "./$APP_NAME replay $DEMO_DIR/cache_test.vcr --fallback -- echo 'LIVE RUN: Cache was missing, now recorded.'"
 run_cmd "./$APP_NAME inspect $DEMO_DIR/cache_test.vcr"
 
 # 12b. Second run: Cache hit, replays instantly
 echo "\n--- 12b. Second run: Cache Hit (Replays instantly) ---"
-run_cmd "./$APP_NAME replay $DEMO_DIR/cache_test.vcr --fallback \"echo 'LIVE RUN: Cache was missing, now recorded.'\""
+run_cmd "./$APP_NAME replay $DEMO_DIR/cache_test.vcr --fallback -- echo 'LIVE RUN: Cache was missing, now recorded.'"
 
 # 12c. Third run: Cache stale (TTL expired), executes fallback, refreshes cache
 echo "\n--- 12c. Third run: Cache Stale (TTL expired) ---"
 run_cmd "./$APP_NAME record -o $DEMO_DIR/stale_cache.vcr --ttl 1s -- echo 'STALE: This is the old cache.'"
 run_cmd "sleep 2"
-run_cmd "./$APP_NAME replay $DEMO_DIR/stale_cache.vcr --validate --fallback \"echo 'LIVE RUN: Cache was stale, now refreshed.'\""
+run_cmd "./$APP_NAME replay $DEMO_DIR/stale_cache.vcr --validate --fallback -- echo 'LIVE RUN: Cache was stale, now refreshed.'"
 run_cmd "./$APP_NAME inspect $DEMO_DIR/stale_cache.vcr"
 
 echo "======================================="

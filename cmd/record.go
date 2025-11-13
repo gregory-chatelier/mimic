@@ -8,9 +8,7 @@ import (
 
 	"github.com/gregory-chatelier/mimic/pkg/crypto"
 	"github.com/gregory-chatelier/mimic/pkg/recorder"
-	"github.com/gregory-chatelier/mimic/pkg/voucher"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -21,6 +19,7 @@ var (
 	ttl             string
 	preserveTiming  bool
 	prevVoucherPath string
+	redactPatterns  []string
 )
 
 var recordCmd = &cobra.Command{
@@ -83,7 +82,7 @@ and stores it as a cryptographically verifiable voucher (.vcr file).`,
 			durationTTL = d
 		}
 
-		v, err := recorder.Record(cmdToRecord, outputFile, withEnv, durationTTL, preserveTiming, prevVoucherPath)
+		v, err := recorder.Record(cmdToRecord, outputFile, withEnv, durationTTL, preserveTiming, prevVoucherPath, redactPatterns)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error recording command: %v\n", err)
 			os.Exit(1)
@@ -97,32 +96,13 @@ and stores it as a cryptographically verifiable voucher (.vcr file).`,
 				os.Exit(1)
 			}
 
-			// Marshal voucher content (excluding signature) for signing
-			signableVoucher := *v
-			signableVoucher.Signature = voucher.Signature{} // Ensure signature field is empty for signing
-			signableData, err := yaml.Marshal(signableVoucher)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error marshalling voucher for signing: %v\n", err)
-				os.Exit(1)
-			}
-
-			sig, err := crypto.SignData(pk, signableData)
+			// Sign the voucher and get the final YAML data
+			data, err := crypto.SignVoucher(*v, pk)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error signing voucher: %v\n", err)
 				os.Exit(1)
 			}
 
-			v.Signature = voucher.Signature{
-				Algorithm:    "ed25519",
-				SignatureB64: crypto.EncodeBase64(sig),
-			}
-
-			// Re-write the voucher with the signature
-			data, err := yaml.Marshal(v)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to marshal signed voucher to YAML: %v\n", err)
-				os.Exit(1)
-			}
 			if err := os.WriteFile(outputFile, data, 0644); err != nil {
 				fmt.Fprintf(os.Stderr, "failed to write signed voucher to file %s: %v\n", outputFile, err)
 				os.Exit(1)
@@ -142,6 +122,7 @@ func init() {
 	recordCmd.Flags().StringVar(&ttl, "ttl", "", "Expire voucher after specified duration (e.g., 24h, 30m)")
 	recordCmd.Flags().BoolVar(&preserveTiming, "preserve-timing", false, "Record time intervals between outputs")
 	recordCmd.Flags().StringVar(&prevVoucherPath, "previous-voucher", "", "Path to the previous voucher to create a lineage")
+	recordCmd.Flags().StringSliceVar(&redactPatterns, "redact", []string{}, "Environment variable names or regex patterns to redact (can be specified multiple times)")
 	// recordCmd.Flags().StringVar(&note, "note", "", "Add an annotation or description")
 	// recordCmd.Flags().BoolVar(&noStderr, "no-stderr", false, "Ignore stderr in recording")
 }

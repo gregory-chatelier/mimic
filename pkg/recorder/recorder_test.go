@@ -19,7 +19,7 @@ func TestRecord(t *testing.T) {
 
 	// Test case 1: Simple command with stdout
 	cmdArgs1 := []string{"echo", "hello world"}
-	voucher1, err := recorder.Record(cmdArgs1, outputFile, false, 0, false, "")
+	voucher1, err := recorder.Record(cmdArgs1, outputFile, false, 0, false, "", []string{})
 	if err != nil {
 		t.Fatalf("Record failed: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestRecord(t *testing.T) {
 		t.Skip("Skipping stderr test: bash not found in PATH.")
 	}
 
-	voucher2, err := recorder.Record(cmdArgs2, outputFile, false, 0, false, "") // Overwrite for simplicity in test, real use would be new file
+	voucher2, err := recorder.Record(cmdArgs2, outputFile, false, 0, false, "", []string{}) // Overwrite for simplicity in test, real use would be new file
 	if err != nil {
 		t.Fatalf("Record failed for stderr test: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestRecord(t *testing.T) {
 
 	// Test case 3: Command not found
 	cmdArgs3 := []string{"nonexistent-command"}
-	_, err = recorder.Record(cmdArgs3, outputFile, false, 0, false, "")
+	_, err = recorder.Record(cmdArgs3, outputFile, false, 0, false, "", []string{})
 	if err == nil {
 		t.Fatalf("Expected an error for nonexistent command, got none")
 	}
@@ -89,7 +89,7 @@ func TestRecord(t *testing.T) {
 	os.Setenv("MIMIC_TEST_VAR", "hello env")
 	defer os.Unsetenv("MIMIC_TEST_VAR")
 	cmdArgs4 := []string{"bash", "-c", "echo $MIMIC_TEST_VAR"}
-	voucher4, err := recorder.Record(cmdArgs4, outputFile, true, 0, false, "")
+	voucher4, err := recorder.Record(cmdArgs4, outputFile, true, 0, false, "", []string{})
 	if err != nil {
 		t.Fatalf("Record with env failed: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestRecord(t *testing.T) {
 
 	// Test case 5: With timing preservation
 	cmdArgs5 := []string{"bash", "-c", "echo -n a; sleep 0.1; echo -n b"}
-	voucher5, err := recorder.Record(cmdArgs5, outputFile, false, 0, true, "")
+	voucher5, err := recorder.Record(cmdArgs5, outputFile, false, 0, true, "", []string{})
 	if err != nil {
 		t.Fatalf("Record with timing failed: %v", err)
 	}
@@ -118,4 +118,62 @@ func readBase64(t *testing.T, b64 string) string {
 		t.Fatalf("Failed to decode base64: %v", err)
 	}
 	return string(data)
+}
+
+func TestRedactEnvVars(t *testing.T) {
+	input := map[string]string{
+		"API_KEY": "supersecretkey",
+		"GITHUB_TOKEN": "ghp_token",
+		"DB_PASSWORD": "mypassword",
+		"NON_SENSITIVE_VAR": "somevalue",
+		"SECRET_STUFF": "hidden",
+		"USER": "gregory",
+		"ANOTHER_SECRET": "shhh",
+	}
+
+	patterns := []string{
+		"API_KEY",
+		".*TOKEN", // Regex to match GITHUB_TOKEN
+		"DB_PASSWORD",
+		"^SECRET.*", // Regex to match SECRET_STUFF
+	}
+
+	expectedRedaction := "******** REDACTED ********"
+
+	redacted, err := recorder.RedactEnvVars(input, patterns)
+	if err != nil {
+		t.Fatalf("RedactEnvVars failed: %v", err)
+	}
+
+	// Check sensitive variables are redacted
+	if redacted["API_KEY"] != expectedRedaction {
+		t.Errorf("API_KEY: Expected '%s', got '%s'", expectedRedaction, redacted["API_KEY"])
+	}
+	if redacted["GITHUB_TOKEN"] != expectedRedaction {
+		t.Errorf("GITHUB_TOKEN: Expected '%s', got '%s'", expectedRedaction, redacted["GITHUB_TOKEN"])
+	}
+	if redacted["DB_PASSWORD"] != expectedRedaction {
+		t.Errorf("DB_PASSWORD: Expected '%s', got '%s'", expectedRedaction, redacted["DB_PASSWORD"])
+	}
+	if redacted["SECRET_STUFF"] != expectedRedaction {
+		t.Errorf("SECRET_STUFF: Expected '%s', got '%s'", expectedRedaction, redacted["SECRET_STUFF"])
+	}
+	if redacted["ANOTHER_SECRET"] != "shhh" {
+		t.Errorf("ANOTHER_SECRET: Expected 'shhh', got '%s' (should not be redacted by ^SECRET.*)", redacted["ANOTHER_SECRET"])
+	}
+
+	// Check non-sensitive variables are preserved
+	if redacted["NON_SENSITIVE_VAR"] != "somevalue" {
+		t.Errorf("NON_SENSITIVE_VAR: Expected 'somevalue', got '%s'", redacted["NON_SENSITIVE_VAR"])
+	}
+	if redacted["USER"] != "gregory" {
+		t.Errorf("USER: Expected 'gregory', got '%s'", redacted["USER"])
+	}
+
+	// Test case for invalid regex pattern
+	invalidPatterns := []string{"["}
+	_, err = recorder.RedactEnvVars(input, invalidPatterns)
+	if err == nil {
+		t.Errorf("Expected an error for invalid regex pattern, got none")
+	}
 }

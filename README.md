@@ -116,22 +116,28 @@ mimic replay demo_build.vcr --preserve-timing --speed 2
 # Output appears with a 5-second delay.
 ```
 
-### Example 3: Self-healing caching
+### Example 3: Self-healing caching for expensive operations
 
-**Scenario:** You want to cache the result of a command (e.g., downloading a large machine learning model) for 1 week. If the cache is fresh, use it instantly. If it's expired or missing, run the live command and automatically update the cache.
+**Scenario:** Use `mimic` to cache the output of slow, expensive, or rate-limited operations in CI/CD pipelines. If the voucher is missing or expired, the live command is executed and the cache is automatically refreshed.
 
 ```bash
-# The first run: Cache is missing. Fallback runs, and a new voucher is created.
-mimic replay model_download.vcr --validate --fallback "wget https://ml.corp/tts-v3.zip" --ttl 1w
-# Output: LIVE download-model command runs, result is saved to model_download.vcr
+# Cache an 'npm audit' for 1 day
+mimic replay npm-audit.vcr --fallback --ttl 1d -- npm audit
+```
 
-# Subsequent runs (within 1 week): Cache is fresh.
-mimic replay model_download.vcr --validate --fallback "wget https://ml.corp/tts-v3.zip" --ttl 1w
-# Output: Instant replay from model_download.vcr (Cache Hit)
+### Example 5: "Time Capsule" for production incidents
 
-# Run after 1 week: Cache is stale. Fallback runs again, and the voucher is refreshed.
-mimic replay model_download.vcr --validate --fallback "wget https://ml.corp/tts-v3.zip" --ttl 1w
-# Output: LIVE download-model command runs, result is saved to model_download.vcr (Cache Refresh)
+**The Magic:** Record production commands during incidents for post-mortem replay.
+
+```bash
+# During incident:
+mimic record -o incident-2024-db-query.vcr --sign -- \
+  psql -c "EXPLAIN ANALYZE SELECT * FROM slow_table"
+
+# In post-mortem (weeks later):
+mimic inspect incident-2024-db-query.vcr
+mimic replay incident-2024-db-query.vcr --preserve-timing
+# Relive the EXACT slow query behavior
 ```
 
 ## 6. License

@@ -3,10 +3,15 @@ package crypto
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/pem"
 	"fmt"
 	"os"
+
+	"github.com/gregory-chatelier/mimic/pkg/voucher"
+	"gopkg.in/yaml.v3"
 )
 
 // GenerateKeyPair generates a new Ed25519 private/public key pair and saves them to the specified paths.
@@ -88,4 +93,43 @@ func EncodeBase64(data []byte) string {
 // DecodeBase64 decodes a base64 string to a byte slice.
 func DecodeBase64(s string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(s)
+}
+
+// SignVoucher prepares a voucher for signing, signs it, and returns the final YAML bytes.
+func SignVoucher(v voucher.Voucher, privateKey ed25519.PrivateKey) ([]byte, error) {
+	// 1. Prepare data for signing (clear signature field)
+	signableVoucher := v
+	signableVoucher.Signature = voucher.Signature{}
+	
+	// 2. Marshal the signable voucher to YAML
+	verifiableData, err := yaml.Marshal(signableVoucher)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal voucher for signing: %w", err)
+	}
+
+	// 3. Calculate SHA256 checksum
+	hasher := sha256.New()
+	hasher.Write(verifiableData)
+	checksum := hex.EncodeToString(hasher.Sum(nil))
+
+	// 4. Sign the verifiable data
+	sig, err := SignData(privateKey, verifiableData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign voucher data: %w", err)
+	}
+
+	// 5. Update the voucher's Signature field
+	v.Signature = voucher.Signature{
+		Algorithm:    "ed25519",
+		SignatureB64: EncodeBase64(sig),
+		ChecksumSHA256: checksum,
+	}
+
+	// 6. Marshal the final signed voucher to YAML
+	finalData, err := yaml.Marshal(v)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal signed voucher: %w", err)
+	}
+
+	return finalData, nil
 }

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -62,8 +63,41 @@ func (w *TimedChunkWriter) String() string {
 	return w.buffer.String()
 }
 
+// RedactEnvVars masks sensitive environment variable values based on provided patterns.
+func RedactEnvVars(envVars map[string]string, patterns []string) (map[string]string, error) {
+	redacted := make(map[string]string, len(envVars))
+	redactionString := "******** REDACTED ********"
+
+	// Compile all patterns into a list of regex objects
+	var regexes []*regexp.Regexp
+	for _, p := range patterns {
+		r, err := regexp.Compile(p)
+		if err != nil {
+			return nil, fmt.Errorf("invalid redaction pattern '%s': %w", p, err)
+		}
+		regexes = append(regexes, r)
+	}
+
+	for k, v := range envVars {
+		isSensitive := false
+		for _, r := range regexes {
+			if r.MatchString(k) {
+				isSensitive = true
+				break
+			}
+		}
+
+		if isSensitive {
+			redacted[k] = redactionString
+		} else {
+			redacted[k] = v
+		}
+	}
+	return redacted, nil
+}
+
 // Record executes a command, captures its behavior, and returns a Voucher.
-func Record(cmdArgs []string, outputFile string, withEnv bool, ttl time.Duration, preserveTiming bool, prevVoucherPath string) (*voucher.Voucher, error) {
+func Record(cmdArgs []string, outputFile string, withEnv bool, ttl time.Duration, preserveTiming bool, prevVoucherPath string, redactPatterns []string) (*voucher.Voucher, error) {
 	// Separate command and arguments
 	name := cmdArgs[0]
 	args := cmdArgs[1:]
@@ -118,6 +152,12 @@ func Record(cmdArgs []string, outputFile string, withEnv bool, ttl time.Duration
 				envVars[parts[0]] = parts[1]
 			}
 		}
+		
+		var redactErr error
+		envVars, redactErr = RedactEnvVars(envVars, redactPatterns)
+		if redactErr != nil {
+			return nil, redactErr
+		}
 	}
 
 	// Calculate previous voucher hash if path is provided
@@ -170,7 +210,7 @@ func Record(cmdArgs []string, outputFile string, withEnv bool, ttl time.Duration
 			return nil, fmt.Errorf("failed to marshal voucher to YAML: %w", err)
 		}
 		if err := os.WriteFile(outputFile, data, 0644); err != nil {
-			return nil, fmt.Errorf("failed to write voucher to file %s: %w", outputFile, err)
+			return nil, fmt.Errorf("failed to write voucher to file %s: %v\n", outputFile, err)
 		}
 		fmt.Printf("Voucher recorded to %s\n", outputFile)
 	}
