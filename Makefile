@@ -25,7 +25,7 @@ all: build
 
 # Build the binary for the current platform
 build: 
-	$(GOBUILD) $(LDFLAGS) -o $(BINARY_NAME) ./cmd/mimic
+	$(GOBUILD) $(LDFLAGS) -o $(BINARY_NAME) .
 
 # Run all tests
 test: 
