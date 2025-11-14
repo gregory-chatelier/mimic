@@ -33,4 +33,6 @@ func init() {
 	rootCmd.AddCommand(inspectCmd)
 	rootCmd.AddCommand(refreshCmd)
 	rootCmd.AddCommand(replayCmd)
+
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
 }

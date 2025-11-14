@@ -255,15 +255,3 @@ if the voucher is missing, expired, or malformed.`,
 		os.Exit(exitCode)
 	},
 }
-
-func init() {
-	rootCmd.AddCommand(replayCmd)
-
-	replayCmd.Flags().BoolVar(&validateVoucher, "validate", false, "Verify signature and integrity before replay")
-	replayCmd.Flags().StringVar(&publicKeyPath, "public-key", "mimic.pub", "Path to the public key file for validation")
-	replayCmd.Flags().StringVar(&privateKeyPath, "private-key", "", "Path to the private key file for re-signing on fallback")
-	replayCmd.Flags().BoolVar(&replayPreserveTiming, "preserve-timing", false, "Simulate original timing delays")
-	replayCmd.Flags().Float64Var(&speed, "speed", 1.0, "Adjust playback speed (e.g., 2x, 0.5x)")
-	replayCmd.Flags().BoolVar(&useFallback, "fallback", false, "Execute real command to refresh cache if voucher is missing or invalid")
-	replayCmd.Flags().BoolVar(&requireSignature, "require-signature", false, "Require the voucher to be signed for successful replay")
-}

@@ -85,8 +85,4 @@ func runVerifyCmd(cmd *cobra.Command, args []string) (int, error) {
 	}
 }
 
-func init() {
-	rootCmd.AddCommand(verifyCmd)
 
-	verifyCmd.Flags().StringVar(&verifyPublicKeyPath, "public-key", "mimic.pub", "Path to the public key file for verification")
-}

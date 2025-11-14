@@ -137,17 +137,4 @@ func runRecordCmd(cmd *cobra.Command, args []string) (int, error) {
 	return 0, nil
 }
 
-func init() {
-	rootCmd.AddCommand(recordCmd)
 
-	recordCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output voucher file (default: auto-named based on command)")
-	recordCmd.Flags().BoolVar(&signVoucher, "sign", false, "Sign the voucher with default key")
-	recordCmd.Flags().StringVar(&privateKeyPath, "private-key", "mimic.key", "Path to the private key file for signing")
-	recordCmd.Flags().BoolVar(&withEnv, "with-env", false, "Include environment variables in the recording")
-	recordCmd.Flags().StringVar(&ttl, "ttl", "", "Expire voucher after specified duration (e.g., 24h, 30m)")
-	recordCmd.Flags().BoolVar(&preserveTiming, "preserve-timing", false, "Record time intervals between outputs")
-	recordCmd.Flags().StringVar(&prevVoucherPath, "previous-voucher", "", "Path to the previous voucher to create a lineage")
-	recordCmd.Flags().StringSliceVar(&redactPatterns, "redact", []string{}, "Environment variable names or regex patterns to redact (can be specified multiple times)")
-	// recordCmd.Flags().StringVar(&note, "note", "", "Add an annotation or description")
-	// recordCmd.gofmt Flags().BoolVar(&noStderr, "no-stderr", false, "Ignore stderr in recording")
-}
