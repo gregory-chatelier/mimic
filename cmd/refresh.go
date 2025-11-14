@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gregory-chatelier/mimic/pkg/recorder"
+	"github.com/gregory-chatelier/mimic/pkg/validation"
 	"github.com/gregory-chatelier/mimic/pkg/voucher"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -31,8 +32,8 @@ func runRefreshCmd(cmd *cobra.Command, args []string) (int, error) {
 
 	// Input Validation
 	// 1. Validate voucher file existence
-	if _, err := os.Stat(voucherFile); os.IsNotExist(err) {
-		return 1, fmt.Errorf("voucher file not found at %s", voucherFile)
+	if err := validation.ValidateFileExists(voucherFile, "Voucher file"); err != nil {
+		return 1, err
 	}
 
 	// Read existing voucher

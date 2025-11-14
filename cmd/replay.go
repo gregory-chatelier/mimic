@@ -9,6 +9,7 @@ import (
 	"github.com/gregory-chatelier/mimic/pkg/crypto"
 	"github.com/gregory-chatelier/mimic/pkg/recorder"
 	"github.com/gregory-chatelier/mimic/pkg/replayer"
+	"github.com/gregory-chatelier/mimic/pkg/validation"
 	"github.com/gregory-chatelier/mimic/pkg/voucher"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -38,15 +39,15 @@ func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validat
 		if publicKeyPath == "" {
 			return 1, fmt.Errorf("--validate requires a --public-key path to be specified")
 		}
-		if _, err := os.Stat(publicKeyPath); os.IsNotExist(err) {
-			return 1, fmt.Errorf("public key file not found at '%s'", publicKeyPath)
+		if err := validation.ValidateFileExists(publicKeyPath, "Public key file"); err != nil {
+			return 1, err
 		}
 	}
 
 	// 3. Validate private key path if fallback re-signing is requested
 	if useFallback && privateKeyPath != "" {
-		if _, err := os.Stat(privateKeyPath); os.IsNotExist(err) {
-			return 1, fmt.Errorf("private key file not found at '%s' for re-signing on fallback", privateKeyPath)
+		if err := validation.ValidateFileExists(privateKeyPath, "Private key file"); err != nil {
+			return 1, fmt.Errorf("%w for re-signing on fallback", err)
 		}
 	}
 

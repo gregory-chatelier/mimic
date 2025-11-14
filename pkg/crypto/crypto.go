@@ -9,8 +9,8 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
-	"runtime"
 
+	"github.com/gregory-chatelier/mimic/pkg/validation"
 	"github.com/gregory-chatelier/mimic/pkg/voucher"
 	"gopkg.in/yaml.v3"
 )
@@ -46,15 +46,8 @@ func GenerateKeyPair(privateKeyPath, publicKeyPath string) error {
 // LoadPrivateKey loads an Ed25519 private key from a file.
 func LoadPrivateKey(path string) (ed25519.PrivateKey, error) {
 	// Validate file permissions before reading the key
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, fmt.Errorf("cannot find private key file %s: %w", path, err)
-	}
-
-	if runtime.GOOS != "windows" {
-		if perm := info.Mode().Perm(); perm != 0600 {
-			return nil, fmt.Errorf("insecure permissions for private key file %s: expected 0600, got %o", path, perm)
-		}
+	if err := validation.ValidatePrivateKeyPermissions(path); err != nil {
+		return nil, err
 	}
 
 	keyBytes, err := os.ReadFile(path)
@@ -62,9 +55,15 @@ func LoadPrivateKey(path string) (ed25519.PrivateKey, error) {
 		return nil, fmt.Errorf("failed to read private key file %s: %w", path, err)
 	}
 
-	pemBlock, _ := pem.Decode(keyBytes)
-	if pemBlock == nil || pemBlock.Type != "ED25519 PRIVATE KEY" {
-		return nil, fmt.Errorf("invalid PEM block in private key file %s", path)
+	pemBlock, remaining := pem.Decode(keyBytes)
+	if pemBlock == nil {
+		return nil, fmt.Errorf("invalid PEM format in private key file %s", path)
+	}
+	if len(remaining) > 0 {
+		fmt.Fprintf(os.Stderr, "Warning: Private key file %s contains %d extra bytes after PEM block.\n", path, len(remaining))
+	}
+	if pemBlock.Type != "ED25519 PRIVATE KEY" {
+		return nil, fmt.Errorf("invalid PEM block type in private key file %s: expected 'ED25519 PRIVATE KEY', got '%s'", path, pemBlock.Type)
 	}
 
 	privateKey := ed25519.PrivateKey(pemBlock.Bytes)
@@ -89,9 +88,15 @@ func LoadPublicKey(path string) (ed25519.PublicKey, error) {
 		return nil, fmt.Errorf("failed to read public key file %s: %w", path, err)
 	}
 
-	pemBlock, _ := pem.Decode(keyBytes)
-	if pemBlock == nil || pemBlock.Type != "ED25519 PUBLIC KEY" {
-		return nil, fmt.Errorf("invalid PEM block in public key file %s", path)
+	pemBlock, remaining := pem.Decode(keyBytes)
+	if pemBlock == nil {
+		return nil, fmt.Errorf("invalid PEM format in public key file %s", path)
+	}
+	if len(remaining) > 0 {
+		fmt.Fprintf(os.Stderr, "Warning: Public key file %s contains %d extra bytes after PEM block.\n", path, len(remaining))
+	}
+	if pemBlock.Type != "ED25519 PUBLIC KEY" {
+		return nil, fmt.Errorf("invalid PEM block type in public key file %s: expected 'ED25519 PUBLIC KEY', got '%s'", path, pemBlock.Type)
 	}
 
 	publicKey := ed25519.PublicKey(pemBlock.Bytes)
@@ -134,6 +139,7 @@ func SignVoucher(v voucher.Voucher, privateKey ed25519.PrivateKey) ([]byte, erro
 	// 5. Update the voucher's Signature field
 	v.Signature = voucher.Signature{
 		Algorithm:    "ed25519",
+		KeyID:        generateKeyID(privateKey.Public().(ed25519.PublicKey)),
 		SignatureB64: EncodeBase64(sig),
 		ChecksumSHA256: checksum,
 	}
@@ -145,4 +151,10 @@ func SignVoucher(v voucher.Voucher, privateKey ed25519.PrivateKey) ([]byte, erro
 	}
 
 	return finalData, nil
+}
+
+// generateKeyID creates a unique ID for a public key by hashing it.
+func generateKeyID(publicKey ed25519.PublicKey) string {
+	hash := sha256.Sum256(publicKey)
+	return hex.EncodeToString(hash[:])
 }

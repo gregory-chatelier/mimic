@@ -9,6 +9,7 @@ import (
 
 	"github.com/gregory-chatelier/mimic/pkg/crypto"
 	"github.com/gregory-chatelier/mimic/pkg/recorder"
+	"github.com/gregory-chatelier/mimic/pkg/validation"
 	"github.com/spf13/cobra"
 )
 
@@ -67,14 +68,14 @@ func runRecordCmd(cmd *cobra.Command, args []string) (int, error) {
 
 	// Input Validation
 	if signVoucher {
-		if _, err := os.Stat(privateKeyPath); os.IsNotExist(err) {
-			return 1, fmt.Errorf("private key file not found at %s. Use 'mimic keygen' to create one", privateKeyPath)
+		if err := validation.ValidateFileExists(privateKeyPath, "Private key file"); err != nil {
+			return 1, fmt.Errorf("%w. Use 'mimic keygen' to create one", err)
 		}
 	}
 
 	if prevVoucherPath != "" {
-		if _, err := os.Stat(prevVoucherPath); os.IsNotExist(err) {
-			return 1, fmt.Errorf("previous voucher file not found at %s", prevVoucherPath)
+		if err := validation.ValidateFileExists(prevVoucherPath, "Previous voucher file"); err != nil {
+			return 1, err
 		}
 	}
 
@@ -90,6 +91,15 @@ func runRecordCmd(cmd *cobra.Command, args []string) (int, error) {
 			return 1, fmt.Errorf("parsing TTL duration: %w", err)
 		}
 		durationTTL = d
+	}
+
+	const (
+		MinTTL = 1 * time.Minute
+		MaxTTL = 365 * 24 * time.Hour
+	)
+
+	if durationTTL != 0 && (durationTTL < MinTTL || durationTTL > MaxTTL) {
+		return 1, fmt.Errorf("TTL must be between %v and %v (or 0 for no expiration)", MinTTL, MaxTTL)
 	}
 
 	var envVarsToCapture []string
