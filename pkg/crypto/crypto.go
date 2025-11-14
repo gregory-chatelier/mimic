@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/gregory-chatelier/mimic/pkg/voucher"
 	"gopkg.in/yaml.v3"
@@ -44,6 +45,18 @@ func GenerateKeyPair(privateKeyPath, publicKeyPath string) error {
 
 // LoadPrivateKey loads an Ed25519 private key from a file.
 func LoadPrivateKey(path string) (ed25519.PrivateKey, error) {
+	// Validate file permissions before reading the key
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("cannot find private key file %s: %w", path, err)
+	}
+
+	if runtime.GOOS != "windows" {
+		if perm := info.Mode().Perm(); perm != 0600 {
+			return nil, fmt.Errorf("insecure permissions for private key file %s: expected 0600, got %o", path, perm)
+		}
+	}
+
 	keyBytes, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read private key file %s: %w", path, err)

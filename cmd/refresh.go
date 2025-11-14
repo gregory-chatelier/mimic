@@ -19,51 +19,55 @@ re-runs it, and creates a new voucher, overwriting the old one.
 It can be used to update vouchers that have expired or whose command behavior has changed.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		voucherFile := args[0]
-
-		// Input Validation
-		// 1. Validate voucher file existence
-		if _, err := os.Stat(voucherFile); os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "Error: Voucher file not found at %s\n", voucherFile)
-			os.Exit(1)
+		if exitCode, err := runRefreshCmd(cmd, args); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(exitCode)
 		}
-
-		// Read existing voucher
-		data, err := os.ReadFile(voucherFile)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to read voucher file %s: %v\n", voucherFile, err)
-			os.Exit(1)
-		}
-
-		var v voucher.Voucher
-		if err := yaml.Unmarshal(data, &v); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to unmarshal voucher from %s: %v\n", voucherFile, err)
-			os.Exit(1)
-		}
-
-		// Get command to re-run
-		cmdToRecord := v.Command.Argv
-
-		fmt.Printf("Refreshing voucher by re-running command: %s\n", strings.Join(cmdToRecord, " "))
-
-		// Record the command again, overwriting the old voucher
-		// We re-use the settings from the old voucher where possible (e.g., withEnv, preserveTiming)
-		// For simplicity in this implementation, we will use the default settings for the new recording.
-		// A more advanced implementation could parse all settings from the old voucher.
-
-		var envVarsToCapture []string
-		if v.Command.Env != nil && len(v.Command.Env) > 0 {
-			envVarsToCapture = []string{} // Capture all env vars if original had them
-		}
-
-		_, err = recorder.Record(cmdToRecord, voucherFile, envVarsToCapture, v.TTL, len(v.Stdout) > 1 || len(v.Stderr) > 1, voucherFile, []string{})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error refreshing voucher: %v\n", err)
-			os.Exit(1)
-		}
-
-		fmt.Printf("Voucher %s has been refreshed.\n", voucherFile)
 	},
+}
+
+func runRefreshCmd(cmd *cobra.Command, args []string) (int, error) {
+	voucherFile := args[0]
+
+	// Input Validation
+	// 1. Validate voucher file existence
+	if _, err := os.Stat(voucherFile); os.IsNotExist(err) {
+		return 1, fmt.Errorf("voucher file not found at %s", voucherFile)
+	}
+
+	// Read existing voucher
+	data, err := os.ReadFile(voucherFile)
+	if err != nil {
+		return 1, fmt.Errorf("failed to read voucher file %s: %w", voucherFile, err)
+	}
+
+	var v voucher.Voucher
+	if err := yaml.Unmarshal(data, &v); err != nil {
+		return 1, fmt.Errorf("failed to unmarshal voucher from %s: %w", voucherFile, err)
+	}
+
+	// Get command to re-run
+	cmdToRecord := v.Command.Argv
+
+	fmt.Printf("Refreshing voucher by re-running command: %s\n", strings.Join(cmdToRecord, " "))
+
+	// Record the command again, overwriting the old voucher
+	// We re-use the settings from the old voucher where possible (e.g., withEnv, preserveTiming)
+	// For simplicity in this implementation, we will use the default settings for the new recording.
+	// A more advanced implementation could parse all settings from the old voucher.
+
+	var envVarsToCapture []string
+	if v.Command.Env != nil && len(v.Command.Env) > 0 {
+		envVarsToCapture = []string{} // Capture all env vars if original had them
+	}
+
+	_, err = recorder.Record(cmdToRecord, voucherFile, envVarsToCapture, v.TTL, len(v.Stdout) > 1 || len(v.Stderr) > 1, voucherFile, []string{})
+	if err != nil {
+		return 1, fmt.Errorf("refreshing voucher: %w", err)
+	}
+
+	fmt.Printf("Voucher %s has been refreshed.\n", voucherFile)
+	return 0, nil
 }
 
 func init() {

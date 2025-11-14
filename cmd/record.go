@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -29,92 +30,101 @@ var recordCmd = &cobra.Command{
 and stores it as a cryptographically verifiable voucher (.vcr file).`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Find the position of '--' to separate mimic flags from the command to be recorded
-		separatorIdx := -1
-		for i, arg := range args {
-			if arg == "--" {
-				separatorIdx = i
-				break
-			}
-		}
-
-		var cmdToRecord []string
-		if separatorIdx != -1 {
-			cmdToRecord = args[separatorIdx+1:]
-		} else {
-			// If no '--' is found, assume all args are part of the command to record
-			cmdToRecord = args
-		}
-
-		if len(cmdToRecord) == 0 {
-			fmt.Println("Error: No command provided to record.")
-			_ = cmd.Help()
-			os.Exit(1)
-		}
-
-		// Input Validation
-		if signVoucher {
-			if _, err := os.Stat(privateKeyPath); os.IsNotExist(err) {
-				fmt.Fprintf(os.Stderr, "Error: Private key file not found at %s. Use 'mimic keygen' to create one.\n", privateKeyPath)
-				os.Exit(1)
-			}
-		}
-
-		if prevVoucherPath != "" {
-			if _, err := os.Stat(prevVoucherPath); os.IsNotExist(err) {
-				fmt.Fprintf(os.Stderr, "Error: Previous voucher file not found at %s.\n", prevVoucherPath)
-				os.Exit(1)
-			}
-		}
-
-		if outputFile == "" {
-			// Default output file name based on the command
-			outputFile = strings.ReplaceAll(cmdToRecord[0], " ", "_") + ".vcr"
-		}
-
-		durationTTL := time.Duration(0)
-		if ttl != "" {
-			d, err := time.ParseDuration(ttl)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error parsing TTL duration: %v\n", err)
-				os.Exit(1)
-			}
-			durationTTL = d
-		}
-
-		var envVarsToCapture []string
-		if withEnv {
-			envVarsToCapture = []string{} // Empty slice means capture all
-		}
-
-		v, err := recorder.Record(cmdToRecord, outputFile, envVarsToCapture, durationTTL, preserveTiming, prevVoucherPath, redactPatterns)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error recording command: %v\n", err)
-			os.Exit(1)
-		}
-
-		if signVoucher {
-			// Load private key
-			pk, err := crypto.LoadPrivateKey(privateKeyPath)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error loading private key for signing: %v\n", err)
-				os.Exit(1)
-			}
-
-			// Sign the voucher and get the final YAML data
-			data, err := crypto.SignVoucher(*v, pk)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error signing voucher: %v\n", err)
-				os.Exit(1)
-			}
-
-			if err := os.WriteFile(outputFile, data, 0644); err != nil {
-				fmt.Fprintf(os.Stderr, "failed to write signed voucher to file %s: %v\n", outputFile, err)
-				os.Exit(1)
-			}
-			fmt.Printf("Voucher signed and recorded to %s\n", outputFile)
+		if exitCode, err := runRecordCmd(cmd, args); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(exitCode)
 		}
 	},
+}
+
+func runRecordCmd(cmd *cobra.Command, args []string) (int, error) {
+	// Find the position of '--' to separate mimic flags from the command to be recorded
+	separatorIdx := -1
+	for i, arg := range args {
+		if arg == "--" {
+			separatorIdx = i
+			break
+		}
+	}
+
+	var cmdToRecord []string
+	if separatorIdx != -1 {
+		cmdToRecord = args[separatorIdx+1:]
+	} else {
+		// If no '--' is found, assume all args are part of the command to record
+		cmdToRecord = args
+	}
+
+	if len(cmdToRecord) == 0 {
+		_ = cmd.Help()
+		return 1, fmt.Errorf("no command provided to record")
+	}
+
+	// Validate that the command exists in the PATH
+	if _, err := exec.LookPath(cmdToRecord[0]); err != nil {
+		return 1, fmt.Errorf("command '%s' not found in PATH", cmdToRecord[0])
+	}
+
+	// Input Validation
+	if signVoucher {
+		if _, err := os.Stat(privateKeyPath); os.IsNotExist(err) {
+			return 1, fmt.Errorf("private key file not found at %s. Use 'mimic keygen' to create one", privateKeyPath)
+		}
+	}
+
+	if prevVoucherPath != "" {
+		if _, err := os.Stat(prevVoucherPath); os.IsNotExist(err) {
+			return 1, fmt.Errorf("previous voucher file not found at %s", prevVoucherPath)
+		}
+	}
+
+	if outputFile == "" {
+		// Default output file name based on the command
+		outputFile = strings.ReplaceAll(cmdToRecord[0], " ", "_") + ".vcr"
+	}
+
+	durationTTL := time.Duration(0)
+	if ttl != "" {
+		d, err := time.ParseDuration(ttl)
+		if err != nil {
+			return 1, fmt.Errorf("parsing TTL duration: %w", err)
+		}
+		durationTTL = d
+	}
+
+	var envVarsToCapture []string
+	if withEnv {
+		envVarsToCapture = []string{} // Empty slice means capture all
+	}
+
+	v, err := recorder.Record(cmdToRecord, outputFile, envVarsToCapture, durationTTL, preserveTiming, prevVoucherPath, redactPatterns)
+	if err != nil {
+		return 1, fmt.Errorf("recording command: %w", err)
+	}
+
+	if !signVoucher {
+		fmt.Printf("Voucher recorded to %s\n", outputFile)
+		return 0, nil
+	}
+
+	// Load private key
+	pk, err := crypto.LoadPrivateKey(privateKeyPath)
+	if err != nil {
+		return 1, fmt.Errorf("loading private key for signing: %w", err)
+	}
+
+	// Sign the voucher and get the final YAML data
+	data, err := crypto.SignVoucher(*v, pk)
+	if err != nil {
+		return 1, fmt.Errorf("signing voucher: %w", err)
+	}
+
+	if err := os.WriteFile(outputFile, data, 0644); err != nil {
+		return 1, fmt.Errorf("failed to write signed voucher to file %s: %w", outputFile, err)
+	}
+	fmt.Printf("Voucher signed and recorded to %s\n", outputFile)
+
+	return 0, nil
 }
 
 func init() {
@@ -129,5 +139,5 @@ func init() {
 	recordCmd.Flags().StringVar(&prevVoucherPath, "previous-voucher", "", "Path to the previous voucher to create a lineage")
 	recordCmd.Flags().StringSliceVar(&redactPatterns, "redact", []string{}, "Environment variable names or regex patterns to redact (can be specified multiple times)")
 	// recordCmd.Flags().StringVar(&note, "note", "", "Add an annotation or description")
-	// recordCmd.Flags().BoolVar(&noStderr, "no-stderr", false, "Ignore stderr in recording")
+	// recordCmd.gofmt Flags().BoolVar(&noStderr, "no-stderr", false, "Ignore stderr in recording")
 }

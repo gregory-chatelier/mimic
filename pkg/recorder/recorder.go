@@ -20,7 +20,7 @@ import (
 
 // TimedChunkWriter is an io.Writer that records the time and content of each write operation.
 type TimedChunkWriter struct {
-	mu        sync.Mutex
+	mu        sync.RWMutex
 	chunks    []voucher.OutputChunk
 	lastWrite time.Time
 	buffer    bytes.Buffer
@@ -44,22 +44,22 @@ func (w *TimedChunkWriter) Write(p []byte) (n int, err error) {
 		DataB64: base64.StdEncoding.EncodeToString(p),
 	})
 	w.lastWrite = time.Now()
-	w.buffer.Write(p)
+	n, err = w.buffer.Write(p)
 
-	return len(p), nil
+	return n, err
 }
 
 // Chunks returns the recorded output chunks.
 func (w *TimedChunkWriter) Chunks() []voucher.OutputChunk {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	return w.chunks
 }
 
 // String returns the full output as a single string.
 func (w *TimedChunkWriter) String() string {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	return w.buffer.String()
 }
 
