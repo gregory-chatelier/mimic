@@ -46,4 +46,5 @@ type Voucher struct {
 	ExitCode            int           `yaml:"exit_code"`
 	Metadata            Metadata      `yaml:"metadata,omitempty"`
 	Signature           Signature     `yaml:"signature,omitempty"`
+	PreserveTiming      bool          `yaml:"preserve_timing,omitempty"` // New field
 }

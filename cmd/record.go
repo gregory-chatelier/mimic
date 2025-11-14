@@ -104,7 +104,7 @@ func runRecordCmd(cmd *cobra.Command, args []string) (int, error) {
 
 	var envVarsToCapture []string
 	if withEnv {
-		envVarsToCapture = []string{} // Empty slice means capture all
+		envVarsToCapture = []string{recorder.CaptureAllEnvVars} // Use constant for clarity
 	}
 
 	v, err := recorder.Record(cmdToRecord, outputFile, envVarsToCapture, durationTTL, preserveTiming, prevVoucherPath, redactPatterns)

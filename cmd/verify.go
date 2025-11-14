@@ -1,11 +1,8 @@
 package cmd
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/gregory-chatelier/mimic/pkg/crypto"
 	"github.com/gregory-chatelier/mimic/pkg/validation"
@@ -20,9 +17,9 @@ var (
 
 var verifyCmd = &cobra.Command{
 	Use:   "verify <voucher>",
-	Short: "Verify the authenticity and integrity of a voucher",
-	Long: `The verify command checks the cryptographic signature and integrity of a .vcr voucher file.
-It ensures that the voucher has not been tampered with since it was signed.`,
+	Short: "Verify the cryptographic signature of a voucher",
+	Long: `The verify command checks the integrity and authenticity of a .vcr voucher file
+by verifying its Ed25519 signature against a provided public key.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if exitCode, err := runVerifyCmd(cmd, args); err != nil {
@@ -40,16 +37,9 @@ func runVerifyCmd(cmd *cobra.Command, args []string) (int, error) {
 	if err := validation.ValidateFileExists(voucherFile, "Voucher file"); err != nil {
 		return 1, err
 	}
-
 	// 2. Validate public key file existence
 	if err := validation.ValidateFileExists(verifyPublicKeyPath, "Public key file"); err != nil {
-		return 1, fmt.Errorf("%w. Cannot verify signature", err)
-	}
-
-	// Load public key
-	pk, err := crypto.LoadPublicKey(verifyPublicKeyPath)
-	if err != nil {
-		return 1, fmt.Errorf("loading public key for verification: %w", err)
+		return 1, err
 	}
 
 	// Read voucher file
@@ -67,48 +57,36 @@ func runVerifyCmd(cmd *cobra.Command, args []string) (int, error) {
 		return 1, fmt.Errorf("voucher is not signed")
 	}
 
+	// Load public key
+	pk, err := crypto.LoadPublicKey(verifyPublicKeyPath)
+	if err != nil {
+		return 1, fmt.Errorf("loading public key: %w", err)
+	}
+
+	// Decode signature
 	signatureBytes, err := crypto.DecodeBase64(v.Signature.SignatureB64)
 	if err != nil {
 		return 1, fmt.Errorf("decoding signature: %w", err)
 	}
 
-	// Prepare data for verification (exclude signature field)
-	verifiableVoucher := v
-	verifiableVoucher.Signature = voucher.Signature{}
-	verifiableData, err := yaml.Marshal(verifiableVoucher)
+	// Prepare data for verification (voucher without signature)
+	v.Signature = voucher.Signature{}
+	verifiableData, err := yaml.Marshal(v)
 	if err != nil {
-		return 1, fmt.Errorf("marshalling voucher for verification: %w", err)
+		return 1, fmt.Errorf("failed to marshal voucher for verification: %w", err)
 	}
 
-	if !crypto.VerifySignature(pk, verifiableData, signatureBytes) {
-		return 1, fmt.Errorf("signature invalid")
+	// Verify signature
+	if crypto.VerifySignature(pk, verifiableData, signatureBytes) {
+		fmt.Println("Voucher signature is valid.")
+		return 0, nil
+	} else {
+		return 1, fmt.Errorf("voucher signature is invalid! This indicates tampering")
 	}
-	fmt.Println("✔ Signature valid (ed25519)")
-
-	// Check SHA256 checksum
-	hasher := sha256.New()
-	hasher.Write(verifiableData)
-	calculatedChecksum := hex.EncodeToString(hasher.Sum(nil))
-
-	if calculatedChecksum != v.Signature.ChecksumSHA256 {
-		return 1, fmt.Errorf("SHA256 checksum mismatch! Expected %s, calculated %s", v.Signature.ChecksumSHA256, calculatedChecksum)
-	}
-	fmt.Println("✔ SHA256 checksum matches")
-
-	// Check TTL
-	if v.TTL > 0 {
-		expirationTime := v.RecordedAt.Add(v.TTL)
-		if time.Now().After(expirationTime) {
-			return 1, fmt.Errorf("voucher expired on %s (TTL: %s)", expirationTime.Format(time.RFC3339), v.TTL.String())
-		}
-	}
-	fmt.Println("✔ Voucher not expired")
-
-	return 0, nil
 }
 
 func init() {
 	rootCmd.AddCommand(verifyCmd)
 
-	verifyCmd.Flags().StringVar(&verifyPublicKeyPath, "public-key", "mimic.pub", "Path to the public key file for verification")
+	verifyCmd.Flags().StringVar(&verifyPublicKeyPath, "verify-public-key", "mimic.pub", "Path to the public key file for verification")
 }

@@ -21,11 +21,12 @@ var (
 	replayPreserveTiming bool
 	speed                float64
 	useFallback          bool
+	requireSignature     bool // New flag
 )
 
 // RunReplayCommand contains the core logic for the replay command,
 // returning the exit code and an error, rather than calling os.Exit directly.
-func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validateVoucher bool, publicKeyPath string, privateKeyPath string, replayPreserveTiming bool, speed float64, useFallback bool) (int, error) {
+func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validateVoucher bool, publicKeyPath string, privateKeyPath string, replayPreserveTiming bool, speed float64, useFallback bool, requireSignature bool) (int, error) {
 	isCacheStale := false
 	isSecurityFailure := false
 
@@ -35,9 +36,9 @@ func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validat
 	}
 
 	// 2. Validate public key path if validation is requested
-	if validateVoucher {
+	if validateVoucher || requireSignature { // If requireSignature, validation is implicitly needed
 		if publicKeyPath == "" {
-			return 1, fmt.Errorf("--validate requires a --public-key path to be specified")
+			return 1, fmt.Errorf("--validate or --require-signature requires a --public-key path to be specified")
 		}
 		if err := validation.ValidateFileExists(publicKeyPath, "Public key file"); err != nil {
 			return 1, err
@@ -70,7 +71,7 @@ func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validat
 		}
 
 		// Perform validation if required
-		if validateVoucher && !isCacheStale {
+		if (validateVoucher || requireSignature) && !isCacheStale {
 			// Load public key (already validated existence above)
 			pk, err := crypto.LoadPublicKey(publicKeyPath)
 			if err != nil {
@@ -88,7 +89,10 @@ func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validat
 			if !isCacheStale { // Only check signature if not already stale from TTL
 				if v.Signature.SignatureB64 == "" {
 					isSecurityFailure = true
-					return 1, fmt.Errorf("voucher is not signed, but validation was requested")
+					if requireSignature {
+						return 1, fmt.Errorf("voucher is not signed, but --require-signature flag was set")
+					}
+					fmt.Fprintln(os.Stderr, "Warning: Voucher is not signed.")
 				} else {
 					signatureBytes, err := crypto.DecodeBase64(v.Signature.SignatureB64)
 					if err != nil {
@@ -243,7 +247,7 @@ if the voucher is missing, expired, or malformed.`,
 			fallbackCmdToExecute = args[separatorIdx+1:]
 		}
 
-		exitCode, err := RunReplayCommand(voucherFile, fallbackCmdToExecute, validateVoucher, publicKeyPath, privateKeyPath, replayPreserveTiming, speed, useFallback)
+		exitCode, err := RunReplayCommand(voucherFile, fallbackCmdToExecute, validateVoucher, publicKeyPath, privateKeyPath, replayPreserveTiming, speed, useFallback, requireSignature)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		}
@@ -255,9 +259,10 @@ func init() {
 	rootCmd.AddCommand(replayCmd)
 
 	replayCmd.Flags().BoolVar(&validateVoucher, "validate", false, "Verify signature and integrity before replay")
-	replayCmd.Flags().StringVar(&publicKeyPath, "public-key", "mimic.pub", "Path to the public key file for verification")
+	replayCmd.Flags().StringVar(&publicKeyPath, "replay-public-key", "mimic.pub", "Path to the public key file for validation")
 	replayCmd.Flags().StringVar(&privateKeyPath, "private-key", "", "Path to the private key file for re-signing on fallback")
 	replayCmd.Flags().BoolVar(&replayPreserveTiming, "preserve-timing", false, "Simulate original timing delays")
 	replayCmd.Flags().Float64Var(&speed, "speed", 1.0, "Adjust playback speed (e.g., 2x, 0.5x)")
 	replayCmd.Flags().BoolVar(&useFallback, "fallback", false, "Execute real command to refresh cache if voucher is missing or invalid")
+	replayCmd.Flags().BoolVar(&requireSignature, "require-signature", false, "Require the voucher to be signed for successful replay")
 }

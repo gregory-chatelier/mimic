@@ -5,11 +5,16 @@ import (
 	"os"
 	"strings"
 
+	"github.com/gregory-chatelier/mimic/pkg/crypto"
 	"github.com/gregory-chatelier/mimic/pkg/recorder"
 	"github.com/gregory-chatelier/mimic/pkg/validation"
 	"github.com/gregory-chatelier/mimic/pkg/voucher"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
+)
+
+var (
+	refreshPublicKeyPath string
 )
 
 var refreshCmd = &cobra.Command{
@@ -47,6 +52,38 @@ func runRefreshCmd(cmd *cobra.Command, args []string) (int, error) {
 		return 1, fmt.Errorf("failed to unmarshal voucher from %s: %w", voucherFile, err)
 	}
 
+	// Verify signature of original voucher if present
+	if v.Signature.SignatureB64 != "" {
+		if refreshPublicKeyPath == "" {
+			return 1, fmt.Errorf("original voucher is signed, but --public-key was not provided for verification")
+		}
+		if err := validation.ValidateFileExists(refreshPublicKeyPath, "Public key file"); err != nil {
+			return 1, fmt.Errorf("failed to verify original voucher signature: %w", err)
+		}
+
+		pk, err := crypto.LoadPublicKey(refreshPublicKeyPath)
+		if err != nil {
+			return 1, fmt.Errorf("failed to load public key for verification: %w", err)
+		}
+
+		signatureBytes, err := crypto.DecodeBase64(v.Signature.SignatureB64)
+		if err != nil {
+			return 1, fmt.Errorf("failed to decode signature for verification: %w", err)
+		}
+
+		verifiableVoucher := v
+		verifiableVoucher.Signature = voucher.Signature{}
+		verifiableData, err := yaml.Marshal(verifiableVoucher)
+		if err != nil {
+			return 1, fmt.Errorf("failed to marshal voucher for verification: %w", err)
+		}
+
+		if !crypto.VerifySignature(pk, verifiableData, signatureBytes) {
+			return 1, fmt.Errorf("original voucher signature is invalid! This indicates tampering")
+		}
+		fmt.Fprintln(os.Stderr, "Warning: Original voucher is signed and verified. Refreshed voucher will need re-signing.")
+	}
+
 	// Get command to re-run
 	cmdToRecord := v.Command.Argv
 
@@ -62,7 +99,7 @@ func runRefreshCmd(cmd *cobra.Command, args []string) (int, error) {
 		envVarsToCapture = []string{} // Capture all env vars if original had them
 	}
 
-	_, err = recorder.Record(cmdToRecord, voucherFile, envVarsToCapture, v.TTL, len(v.Stdout) > 1 || len(v.Stderr) > 1, voucherFile, []string{})
+	_, err = recorder.Record(cmdToRecord, voucherFile, envVarsToCapture, v.TTL, v.PreserveTiming, voucherFile, []string{})
 	if err != nil {
 		return 1, fmt.Errorf("refreshing voucher: %w", err)
 	}
@@ -73,4 +110,5 @@ func runRefreshCmd(cmd *cobra.Command, args []string) (int, error) {
 
 func init() {
 	rootCmd.AddCommand(refreshCmd)
+	refreshCmd.Flags().StringVar(&refreshPublicKeyPath, "refresh-public-key", "mimic.pub", "Path to the public key file for verification of the original voucher")
 }

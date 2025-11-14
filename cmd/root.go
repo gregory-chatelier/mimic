@@ -32,4 +32,5 @@ func init() {
 	rootCmd.AddCommand(verifyCmd)
 	rootCmd.AddCommand(inspectCmd)
 	rootCmd.AddCommand(refreshCmd)
+	rootCmd.AddCommand(replayCmd)
 }

@@ -24,25 +24,25 @@ func Replay(voucherFile string, preserveTiming bool, speed float64) (int, error)
 	}
 
 	// Replay stdout
-	for _, chunk := range v.Stdout {
+	for i, chunk := range v.Stdout {
 		if preserveTiming {
 			time.Sleep(time.Duration(float64(time.Duration(chunk.DelayMs)*time.Millisecond) / speed))
 		}
 		stdout, err := base64.StdEncoding.DecodeString(chunk.DataB64)
 		if err != nil {
-			return 1, fmt.Errorf("failed to decode stdout chunk data '%s': %w", chunk.DataB64, err)
+			return 1, fmt.Errorf("failed to decode stdout chunk %d data: %w", i, err)
 		}
 		fmt.Print(string(stdout))
 	}
 
 	// Replay stderr
-	for _, chunk := range v.Stderr {
+	for i, chunk := range v.Stderr {
 		if preserveTiming {
 			time.Sleep(time.Duration(float64(time.Duration(chunk.DelayMs)*time.Millisecond) / speed))
 		}
 		stderr, err := base64.StdEncoding.DecodeString(chunk.DataB64)
 		if err != nil {
-			return 1, fmt.Errorf("failed to decode stderr chunk data '%s': %w", chunk.DataB64, err)
+			return 1, fmt.Errorf("failed to decode stderr chunk %d data: %w", i, err)
 		}
 		fmt.Fprint(os.Stderr, string(stderr))
 	}

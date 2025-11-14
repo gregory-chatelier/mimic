@@ -89,7 +89,7 @@ func TestRecord(t *testing.T) {
 	os.Setenv("MIMIC_TEST_VAR", "hello env")
 	defer os.Unsetenv("MIMIC_TEST_VAR")
 	cmdArgs4 := []string{"bash", "-c", "echo $MIMIC_TEST_VAR"}
-	voucher4, err := recorder.Record(cmdArgs4, outputFile, []string{}, 0, false, "", []string{})
+	voucher4, err := recorder.Record(cmdArgs4, outputFile, []string{recorder.CaptureAllEnvVars}, 0, false, "", []string{})
 	if err != nil {
 		t.Fatalf("Record with env failed: %v", err)
 	}
