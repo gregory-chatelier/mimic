@@ -95,7 +95,7 @@ func runRefreshCmd(cmd *cobra.Command, args []string) (int, error) {
 	// A more advanced implementation could parse all settings from the old voucher.
 
 	var envVarsToCapture []string
-	if v.Command.Env != nil && len(v.Command.Env) > 0 {
+	if len(v.Command.Env) > 0 {
 		envVarsToCapture = []string{} // Capture all env vars if original had them
 	}
 
@@ -107,5 +107,10 @@ func runRefreshCmd(cmd *cobra.Command, args []string) (int, error) {
 	fmt.Printf("Voucher %s has been refreshed.\n", voucherFile)
 	return 0, nil
 }
+
+func init() {
+	refreshCmd.Flags().StringVarP(&refreshPublicKeyPath, "public-key", "p", "", "Path to the public key for verifying the original voucher (if signed)")
+}
+
 
 

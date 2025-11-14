@@ -98,11 +98,30 @@ For a full list of flags for each command, use `mimic [command] --help`.
 
 | Flag                | Description                                                  |
 | :------------------ | :----------------------------------------------------------- |
-| `--validate`        | Verify signature and integrity before replay.                |
-| `--public-key`      | Path to the public key for verification.                     |
-| `--preserve-timing` | Simulate original timing delays.                             |
-| `--speed`           | Adjust playback speed (e.g., 0.5 to slow down, 2.0 to speed up). |
+| `-v, --validate`    | Verify signature and integrity before replay.                |
+| `-p, --public-key`  | Path to the public key for verification.                     |
+| `-t, --preserve-timing` | Simulate original timing delays.                             |
+| `-s, --speed`       | Adjust playback speed (e.g., 0.5 to slow down, 2.0 to speed up). |
 | `--fallback`        | Execute real command to refresh cache if voucher is missing or invalid. |
+| `--require-signature` | Require the voucher to be signed for replay.                 |
+
+#### `verify` Flags
+
+| Flag                | Description                                                  |
+| :------------------ | :----------------------------------------------------------- |
+| `-p, --public-key`  | Path to the public key for verification.                     |
+
+#### `refresh` Flags
+
+| Flag                | Description                                                  |
+| :------------------ | :----------------------------------------------------------- |
+| `-p, --public-key`  | Path to the public key for verifying the original voucher (if signed). |
+
+#### `keygen` Flags
+
+| Flag                | Description                                                  |
+| :------------------ | :----------------------------------------------------------- |
+| `-o, --output`      | Output directory for the generated key pair (default: current directory). |
 
 ## Examples
 

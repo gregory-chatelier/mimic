@@ -44,4 +44,9 @@ func runKeygenCmd(cmd *cobra.Command, args []string) (int, error) {
 	return 0, nil
 }
 
+func init() {
+	keygenCmd.Flags().StringVarP(&keyOutputPath, "output", "o", "", "Output directory for the generated key pair (default: current directory)")
+}
+
+
 

@@ -39,7 +39,7 @@ func runVerifyCmd(cmd *cobra.Command, args []string) (int, error) {
 	}
 	// 2. Validate public key file existence
 	if err := validation.ValidateFileExists(verifyPublicKeyPath, "Public key file"); err != nil {
-		return 1, err
+		return 1, fmt.Errorf("%w. Use 'mimic keygen' to create one", err)
 	}
 
 	// Read voucher file
@@ -84,5 +84,11 @@ func runVerifyCmd(cmd *cobra.Command, args []string) (int, error) {
 		return 1, fmt.Errorf("voucher signature is invalid! This indicates tampering")
 	}
 }
+
+func init() {
+	verifyCmd.Flags().StringVarP(&verifyPublicKeyPath, "public-key", "p", "", "Path to the public key for verification")
+	_ = verifyCmd.MarkFlagRequired("public-key")
+}
+
 
 

@@ -14,11 +14,19 @@ import (
 )
 
 // Helper function to capture stdout/stderr
-func captureOutput(f func()) (string, string) {
+func captureOutput(t *testing.T, f func()) (string, string) {
+	t.Helper() // Mark this function as a test helper
+
 	oldStdout := os.Stdout
 	oldStderr := os.Stderr
-	rOut, wOut, _ := os.Pipe()
-	rErr, wErr, _ := os.Pipe()
+	rOut, wOut, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Failed to create stdout pipe: %v", err)
+	}
+	rErr, wErr, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Failed to create stderr pipe: %v", err)
+	}
 	os.Stdout = wOut
 	os.Stderr = wErr
 
@@ -30,8 +38,12 @@ func captureOutput(f func()) (string, string) {
 	os.Stderr = oldStderr
 
 	var stdout, stderr bytes.Buffer
-	io.Copy(&stdout, rOut)
-	io.Copy(&stderr, rErr)
+	if _, err := io.Copy(&stdout, rOut); err != nil {
+		t.Fatalf("Failed to copy stdout: %v", err)
+	}
+	if _, err := io.Copy(&stderr, rErr); err != nil {
+		t.Fatalf("Failed to copy stderr: %v", err)
+	}
 	return stdout.String(), stderr.String()
 }
 
@@ -61,7 +73,7 @@ exit_code: 42
 	t.Run("Standard Replay", func(t *testing.T) {
 		var exitCode int
 		var err error
-		stdout, stderr := captureOutput(func() {
+		stdout, stderr := captureOutput(t, func() {
 			exitCode, err = cmd.RunReplayCommand(voucherFile1, nil, false, "", "", false, 1.0, false, false)
 		})
 
@@ -87,7 +99,7 @@ exit_code: 42
 		missingFile := filepath.Join(tempDir, "missing.vcr")
 		var exitCode int
 		var err error
-		_, _ = captureOutput(func() {
+		_, _ = captureOutput(t, func() {
 			exitCode, err = cmd.RunReplayCommand(missingFile, nil, false, "", "", false, 1.0, false, false)
 		})
 
@@ -114,7 +126,7 @@ func TestReplayFallback(t *testing.T) {
 
 		var exitCode int
 		var err error
-		stdout, stderr := captureOutput(func() {
+		stdout, stderr := captureOutput(t, func() {
 			exitCode, err = cmd.RunReplayCommand(voucherFile, fallbackCmdToExecute, false, "", "", false, 1.0, true, false)
 		})
 
@@ -171,7 +183,7 @@ ttl: 1s
 
 		var exitCode int
 		var err error
-		stdout, stderr := captureOutput(func() {
+		stdout, stderr := captureOutput(t, func() {
 			exitCode, err = cmd.RunReplayCommand(voucherFile, fallbackCmdToExecute, true, publicKeyPath, privateKeyPath, false, 1.0, true, false)
 		})
 

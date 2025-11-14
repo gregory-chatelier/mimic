@@ -112,7 +112,7 @@ func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validat
 			if isSecurityFailure {
 				return 1, fmt.Errorf("security validation failed") // Exit immediately on security failure
 			}
-			
+
 			if !isCacheStale {
 				fmt.Fprintln(os.Stderr, "Voucher validated successfully.")
 			}
@@ -125,7 +125,7 @@ func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validat
 			if len(fallbackCmdToExecute) == 0 {
 				return 1, fmt.Errorf("--fallback flag used, but no command provided after '--'")
 			}
-			
+
 			// Join the command for logging purposes
 			fallbackCommandStr := strings.Join(fallbackCmdToExecute, " ")
 			fmt.Fprintf(os.Stderr, "Cache is stale or missing. Executing fallback command: %s\n", fallbackCommandStr)
@@ -142,17 +142,17 @@ func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validat
 			recordFallbackPreserveTiming := replayPreserveTiming // Use replay's preserve timing setting for fallback recording
 
 			var envVarsToCapture []string
-			if v.Command.Env != nil && len(v.Command.Env) > 0 {
+			if len(v.Command.Env) > 0 {
 				envVarsToCapture = []string{} // Capture all env vars if original had them
 			}
 
 			// Record the command using the recorder package
 			_, err = recorder.Record(fallbackCmdToExecute, tmpVCRFile.Name(), envVarsToCapture, v.TTL, recordFallbackPreserveTiming, "", []string{})
-			
+
 			if err != nil {
 				return 1, fmt.Errorf("error recording fallback command: %w", err)
 			}
-			
+
 			// 2. Overwrite the original voucher file with the new recording
 			finalData, err := os.ReadFile(tmpVCRFile.Name())
 			if err != nil {
@@ -182,12 +182,12 @@ func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validat
 				finalData = signedData
 				fmt.Fprintln(os.Stderr, "Voucher successfully re-signed.")
 			}
-			
+
 			if err := os.WriteFile(voucherFile, finalData, 0644); err != nil {
 				return 1, fmt.Errorf("error writing new voucher to %s: %w", voucherFile, err)
 			}
 			fmt.Fprintf(os.Stderr, "Voucher cache refreshed from fallback command and saved to %s\n", voucherFile)
-			
+
 			// 3. Replay from the newly written voucher
 			replayExitCode, err := replayer.Replay(voucherFile, replayPreserveTiming, speed)
 			if err != nil {
@@ -254,4 +254,13 @@ if the voucher is missing, expired, or malformed.`,
 		}
 		os.Exit(exitCode)
 	},
+}
+
+func init() {
+	replayCmd.Flags().BoolVarP(&validateVoucher, "validate", "v", false, "Verify signature and integrity before replay")
+	replayCmd.Flags().StringVarP(&publicKeyPath, "public-key", "p", "", "Path to the public key for verification")
+	replayCmd.Flags().BoolVarP(&replayPreserveTiming, "preserve-timing", "t", false, "Simulate original timing delays")
+	replayCmd.Flags().Float64VarP(&speed, "speed", "s", 1.0, "Adjust playback speed (e.g., 0.5 to slow down, 2.0 to speed up)")
+	replayCmd.Flags().BoolVar(&useFallback, "fallback", false, "Execute real command to refresh cache if voucher is missing or invalid")
+	replayCmd.Flags().BoolVar(&requireSignature, "require-signature", false, "Require the voucher to be signed for replay")
 }

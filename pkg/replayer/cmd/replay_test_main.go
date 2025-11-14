@@ -15,5 +15,7 @@ func main() {
 
 	// For simplicity in the test, we are not passing preserveTiming and speed.
 	// A more advanced test could pass these as flags.
-	replayer.Replay(voucherFile, false, 1.0)
+	if _, err := replayer.Replay(voucherFile, false, 1.0); err != nil {
+		os.Exit(1) // Exit with a non-zero status on error
+	}
 }
