@@ -1,45 +1,66 @@
-# `mimic`
+# mimic
 
 > Record once. Replay forever.
 
-A deterministic, tamper-proof command behavior recorder for developers, systems and educators.
+A deterministic, tamper-proof command behavior recorder
 
-## 1. Summary
+`mimic` records the behavior of a shell command : its standard output, standard error, exit code, and environment metadata, and stores it as a cryptographically verifiable voucher (.vcr file).
 
-`mimic` records the **behavioral contract** of a shell command—its standard output, standard error, exit code, and environment metadata—and stores it as a **cryptographically verifiable voucher** (`.vcr` file).
+Later, that voucher can be replayed to reproduce the command’s behavior exactly, without executing the original command again.
 
-Later, that voucher can be **replayed** to reproduce the command’s behavior *exactly*, without executing the original command again.
-
-## 2. Core concepts
+## Core concepts
 
 `mimic` is built around two core concepts:
 
-1.  **Recording (`mimic record`):** When you record a command, `mimic` executes it, captures its entire behavioral contract, and saves it to a `.vcr` file. This file is a self-contained, human-readable (YAML) voucher.
+1.  Recording (mimic record): When you record a command, mimic executes it, captures its entire behavioral contract, and saves it to a .vcr file. This file is a self-contained, human-readable (YAML) voucher.
 
-2.  **Replaying (`mimic replay`):** When you replay a voucher, `mimic` reproduces the recorded behavior *without* running the original command. It prints the same standard output and standard error, and exits with the same exit code.
+2.  Replaying (mimic replay): When you replay a voucher, mimic reproduces the recorded behavior without running the original command. It prints the same standard output and standard error, and exits with the same exit code.
 
 ### Tamper-proof vouchers
 
 For security and auditing, vouchers can be digitally signed using an Ed25519 key pair. This ensures that a voucher has not been tampered with since it was recorded, providing a trustworthy record of command execution.
 
-### Why not just use shell redirection (`>`)?
+### Why not just use shell redirection ( > )?
 
-Simple shell redirection (`>`) only captures **Standard Output (stdout)**. `mimic` captures the entire **Behavioral Contract** of the command, which is essential for building reliable and auditable systems.
+`mimic` captures the entire behavioral contract of the command, which can be use for building reliable and auditable systems.
 
-The key difference is the ability to **reproduce failure states**. If a command fails, `mimic` records the error message and the non-zero exit code. When replayed, the consuming script behaves *exactly* as if the original command had just failed, making your tests and pipelines truly deterministic.
-
-File redirection gives you data snapshots. `mimic` gives you **executable proofs**.
+File redirection gives you data snapshots. `mimic` gives you executable proofs.
 
 When you need to:
 
-*   **Prove what happened**
-*   **Reproduce failures reliably**
-*   **Demo with confidence**
-*   **Audit with cryptographic certainty**
+*   Prove what happened
+*   Reproduce failures reliably
+*   Demo with confidence
+*   Audit with cryptographic certainty
 
 ...you need behavior recording, not only data storage.
 
-## 4. Usage
+## Installation
+
+This command will download and install `mimic` to a standard location for your system.
+
+**Recommended (User-level):**
+Installs to `$HOME/.local/bin` (Linux/macOS) or a user-specific `bin` directory (Windows).
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/gregory-chatelier/mimic/main/install.sh | sh
+```
+
+**System-wide (Requires `sudo`):**
+Installs to `/usr/local/bin`.
+
+```bash
+sudo curl -sSfL https://raw.githubusercontent.com/gregory-chatelier/mimic/main/install.sh | sh
+```
+
+**Custom Directory:**
+Use the `INSTALL_DIR` environment variable to specify a custom path.
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/gregory-chatelier/mimic/main/install.sh | INSTALL_DIR=$HOME/bin sh
+```
+
+## Usage
 
 The command structure is:
 
@@ -83,7 +104,7 @@ For a full list of flags for each command, use `mimic [command] --help`.
 | `--speed`           | Adjust playback speed (e.g., 0.5 to slow down, 2.0 to speed up). |
 | `--fallback`        | Execute real command to refresh cache if voucher is missing or invalid. |
 
-## 5. Examples
+## Examples
 
 ### Example 1: Tamper-proof auditing
 
@@ -125,7 +146,7 @@ mimic replay demo_build.vcr --preserve-timing --speed 2
 mimic replay npm-audit.vcr --fallback --ttl 1d -- npm audit
 ```
 
-### Example 5: "Time Capsule" for production incidents
+### Example 4: "Time Capsule" for production incidents
 
 **The Magic:** Record production commands during incidents for post-mortem replay.
 
@@ -140,6 +161,6 @@ mimic replay incident-2024-db-query.vcr --preserve-timing
 # Relive the EXACT slow query behavior
 ```
 
-## 6. License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
