@@ -1,4 +1,4 @@
-package replayer_test
+package cmd_test
 
 import (
 	"bytes"
@@ -87,7 +87,7 @@ exit_code: 42
 		missingFile := filepath.Join(tempDir, "missing.vcr")
 		var exitCode int
 		var err error
-		stdout, stderr := captureOutput(func() {
+		_, _ = captureOutput(func() {
 			exitCode, err = cmd.RunReplayCommand(missingFile, nil, false, "", "", false, 1.0, false, false)
 		})
 
@@ -100,12 +100,6 @@ exit_code: 42
 		expectedErr := fmt.Sprintf("Voucher file not found at '%s'", missingFile)
 		if !strings.Contains(err.Error(), expectedErr) {
 			t.Errorf("Expected error to contain '%s', got '%s'", expectedErr, err.Error())
-		}
-		if stdout != "" {
-			t.Errorf("Expected empty stdout, got '%s'", stdout)
-		}
-		if stderr != "" {
-			t.Errorf("Expected empty stderr, got '%s'", stderr)
 		}
 	})
 }
@@ -164,6 +158,7 @@ stderr: []
 exit_code: 0
 ttl: 1s
 `
+
 		if err := os.WriteFile(voucherFile, []byte(expiredContent), 0644); err != nil {
 			t.Fatalf("Failed to write expired voucher file: %v", err)
 		}

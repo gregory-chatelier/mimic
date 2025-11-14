@@ -110,5 +110,5 @@ func runRefreshCmd(cmd *cobra.Command, args []string) (int, error) {
 
 func init() {
 	rootCmd.AddCommand(refreshCmd)
-	refreshCmd.Flags().StringVar(&refreshPublicKeyPath, "refresh-public-key", "mimic.pub", "Path to the public key file for verification of the original voucher")
+	refreshCmd.Flags().StringVar(&refreshPublicKeyPath, "public-key", "mimic.pub", "Path to the public key file for verification of the original voucher")
 }

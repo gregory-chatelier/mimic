@@ -231,6 +231,7 @@ If the --fallback flag is used, the command following the '--' separator will be
 if the voucher is missing, expired, or malformed.`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("replayCmd args: %v\n", args)
 		voucherFile := args[0]
 
 		// 1. Separate mimic flags from the fallback command
@@ -259,7 +260,7 @@ func init() {
 	rootCmd.AddCommand(replayCmd)
 
 	replayCmd.Flags().BoolVar(&validateVoucher, "validate", false, "Verify signature and integrity before replay")
-	replayCmd.Flags().StringVar(&publicKeyPath, "replay-public-key", "mimic.pub", "Path to the public key file for validation")
+	replayCmd.Flags().StringVar(&publicKeyPath, "public-key", "mimic.pub", "Path to the public key file for validation")
 	replayCmd.Flags().StringVar(&privateKeyPath, "private-key", "", "Path to the private key file for re-signing on fallback")
 	replayCmd.Flags().BoolVar(&replayPreserveTiming, "preserve-timing", false, "Simulate original timing delays")
 	replayCmd.Flags().Float64Var(&speed, "speed", 1.0, "Adjust playback speed (e.g., 2x, 0.5x)")
