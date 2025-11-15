@@ -90,12 +90,35 @@ func runVerifyCmd(cmd *cobra.Command, args []string) (int, error) {
 	}
 
 	// 4. Verify the signature.
-	if crypto.VerifySignature(pk, verifiableData, signatureBytes) {
-		fmt.Println("Voucher signature is valid.")
-		return 0, nil
-	} else {
+	if !crypto.VerifySignature(pk, verifiableData, signatureBytes) {
 		return 1, fmt.Errorf("voucher signature is invalid! This indicates tampering")
 	}
+
+	// 5. Verify SHA256Output for integrity of recorded stdout/stderr
+	if v.Metadata.SHA256Output != "" {
+		outputHasher := sha256.New()
+		for _, chunk := range v.Stdout {
+			decoded, err := voucher.DecodeChunkData(chunk.DataB64)
+			if err != nil {
+				return 1, fmt.Errorf("failed to decode stdout chunk data for SHA256Output verification: %w", err)
+			}
+			outputHasher.Write(decoded)
+		}
+		for _, chunk := range v.Stderr {
+			decoded, err := voucher.DecodeChunkData(chunk.DataB64)
+			if err != nil {
+				return 1, fmt.Errorf("failed to decode stderr chunk data for SHA256Output verification: %w", err)
+			}
+			outputHasher.Write(decoded)
+		}
+		calculatedOutputHash := hex.EncodeToString(outputHasher.Sum(nil))
+		if calculatedOutputHash != v.Metadata.SHA256Output {
+			return 1, fmt.Errorf("recorded output SHA256 hash mismatch! This indicates tampering (expected %s, got %s)", v.Metadata.SHA256Output, calculatedOutputHash)
+		}
+	}
+
+	fmt.Println("Voucher signature and output integrity are valid.")
+	return 0, nil
 }
 
 func init() {

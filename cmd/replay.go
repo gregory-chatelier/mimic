@@ -128,6 +128,32 @@ func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validat
 				}
 			}
 
+			// Verify SHA256Output for integrity of recorded stdout/stderr
+			if !isSecurityFailure && v.Metadata.SHA256Output != "" {
+				outputHasher := sha256.New()
+				for _, chunk := range v.Stdout {
+					decoded, err := voucher.DecodeChunkData(chunk.DataB64)
+					if err != nil {
+						isSecurityFailure = true
+						return 1, fmt.Errorf("failed to decode stdout chunk data for SHA256Output verification: %w", err)
+					}
+					outputHasher.Write(decoded)
+				}
+				for _, chunk := range v.Stderr {
+					decoded, err := voucher.DecodeChunkData(chunk.DataB64)
+					if err != nil {
+						isSecurityFailure = true
+						return 1, fmt.Errorf("failed to decode stderr chunk data for SHA256Output verification: %w", err)
+					}
+					outputHasher.Write(decoded)
+				}
+				calculatedOutputHash := hex.EncodeToString(outputHasher.Sum(nil))
+				if calculatedOutputHash != v.Metadata.SHA256Output {
+					isSecurityFailure = true
+					return 1, fmt.Errorf("recorded output SHA256 hash mismatch! This indicates tampering (expected %s, got %s)", v.Metadata.SHA256Output, calculatedOutputHash)
+				}
+			}
+
 			if isSecurityFailure {
 				return 1, fmt.Errorf("security validation failed") // Exit immediately on security failure
 			}

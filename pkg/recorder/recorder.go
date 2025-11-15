@@ -2,8 +2,11 @@ package recorder
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
+	"hash"
 	"io"
 	"os"
 	"os/exec"
@@ -34,6 +37,9 @@ func Record(command []string, outputFile string, envVarsToCapture []string, ttl 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	var stdoutChunks, stderrChunks []voucher.OutputChunk
 
+	// Initialize SHA256 hasher for combined stdout/stderr
+	outputHasher := sha256.New()
+
 	// Create custom writers that will capture chunks
 	var stdoutWriter, stderrWriter io.Writer
 	if preserveTiming {
@@ -44,8 +50,9 @@ func Record(command []string, outputFile string, envVarsToCapture []string, ttl 
 		stderrWriter = &stderrBuf
 	}
 
-	cmd.Stdout = stdoutWriter
-	cmd.Stderr = stderrWriter
+	// Wrap the writers with HashingWriter to update the SHA256 hash
+	cmd.Stdout = NewHashingWriter(stdoutWriter, outputHasher)
+	cmd.Stderr = NewHashingWriter(stderrWriter, outputHasher)
 
 	startTime := time.Now()
 	err := cmd.Run()
@@ -104,6 +111,9 @@ func Record(command []string, outputFile string, envVarsToCapture []string, ttl 
 		}
 	}
 
+	// Get the final SHA256 hash of the combined output
+	finalOutputHash := hex.EncodeToString(outputHasher.Sum(nil))
+
 	// Create voucher
 	v := &voucher.Voucher{
 		MimicVersion: "1.0",
@@ -119,6 +129,9 @@ func Record(command []string, outputFile string, envVarsToCapture []string, ttl 
 		ExitCode:       exitCode,
 		TTL:            ttl,
 		PreserveTiming: preserveTiming,
+		Metadata: voucher.Metadata{
+			SHA256Output: finalOutputHash,
+		},
 	}
 
 	// Marshal to YAML
@@ -205,4 +218,32 @@ func RedactEnvVars(envVars map[string]string, patterns []string) (map[string]str
 	}
 
 	return redacted, nil
+}
+
+// HashingWriter is an io.Writer that writes to an underlying writer and also updates a SHA256 hasher.
+type HashingWriter struct {
+	writer io.Writer
+	hasher hash.Hash
+}
+
+// NewHashingWriter creates a new HashingWriter.
+func NewHashingWriter(writer io.Writer, hasher hash.Hash) *HashingWriter {
+	return &HashingWriter{
+		writer: writer,
+		hasher: hasher,
+	}
+}
+
+// Write writes p to the underlying writer and the hasher.
+func (hw *HashingWriter) Write(p []byte) (n int, err error) {
+	// Write to the underlying writer
+	n, err = hw.writer.Write(p)
+	if err != nil {
+		return n, err
+	}
+
+	// Write to the hasher (always writes all bytes, so no need to check n)
+	hw.hasher.Write(p)
+
+	return n, err
 }
