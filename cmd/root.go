@@ -7,6 +7,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// version is set at build time using -ldflags "-X 'github.com/gregory-chatelier/mimic/cmd.version=vX.Y.Z'"
+var version = "dev"
+
 var rootCmd = &cobra.Command{
 	Use:   "mimic",
 	Short: "mimic - Record once. Replay forever.",
@@ -19,6 +22,15 @@ Later, that voucher can be replayed to reproduce the command’s behavior exactl
 			fmt.Fprintf(os.Stderr, "Error displaying help: %v\n", err)
 			os.Exit(1)
 		}
+	},
+}
+
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print the version number of mimic",
+	Long:  `All software has versions. This is mimic's.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println(version)
 	},
 }
 
@@ -37,6 +49,7 @@ func init() {
 	rootCmd.AddCommand(refreshCmd)
 	rootCmd.AddCommand(replayCmd)
 	rootCmd.AddCommand(recordCmd)
+	rootCmd.AddCommand(versionCmd) // Add the version command
 
 	rootCmd.SetHelpCommand(nil) // Disable the default 'help' command
 

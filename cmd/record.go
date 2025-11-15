@@ -50,11 +50,15 @@ func runRecordCmd(cmd *cobra.Command, args []string) (int, error) {
 	}
 
 	var cmdToRecord []string
+	var rawCommandString string
+
 	if separatorIdx != -1 {
 		cmdToRecord = args[separatorIdx+1:]
+		rawCommandString = strings.Join(cmdToRecord, " ")
 	} else {
 		// If no '--' is found, assume all args are part of the command to record
 		cmdToRecord = args
+		rawCommandString = strings.Join(cmdToRecord, " ")
 	}
 
 	if len(cmdToRecord) == 0 {
@@ -97,7 +101,7 @@ func runRecordCmd(cmd *cobra.Command, args []string) (int, error) {
 		return 1, fmt.Errorf("TTL must be between %v and %v (or 0 for no expiration)", MinTTL, MaxTTL)
 	}
 
-	v, err := recorder.Record(cmdToRecord, outputFile, envVarsToCapture, durationTTL, preserveTiming, redactPatterns)
+	v, err := recorder.Record(version, rawCommandString, cmdToRecord, outputFile, envVarsToCapture, durationTTL, preserveTiming, redactPatterns)
 	if err != nil {
 		return 1, fmt.Errorf("recording command: %w", err)
 	}

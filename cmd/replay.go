@@ -159,7 +159,7 @@ func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validat
 			}
 
 			if !isCacheStale {
-				fmt.Fprintln(os.Stderr, "Voucher validated successfully.")
+				// fmt.Fprintln(os.Stderr, "Voucher validated successfully.") // Removed for silent replay
 			}
 		}
 	}
@@ -192,7 +192,7 @@ func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validat
 			}
 
 			// Record the command using the recorder package
-			_, err = recorder.Record(fallbackCmdToExecute, tmpVCRFile.Name(), envVarsToCapture, v.TTL, recordFallbackPreserveTiming, []string{})
+			_, err = recorder.Record(version, strings.Join(fallbackCmdToExecute, " "), fallbackCmdToExecute, tmpVCRFile.Name(), envVarsToCapture, v.TTL, recordFallbackPreserveTiming, []string{})
 
 			if err != nil {
 				return 1, fmt.Errorf("error recording fallback command: %w", err)
@@ -254,9 +254,9 @@ func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validat
 
 	// --- Default Replay (Voucher is valid) ---
 	if !isCacheStale && !useFallback {
-		fmt.Fprintln(os.Stderr, "Voucher is valid. Replaying from cache.")
+		// fmt.Fprintln(os.Stderr, "Voucher is valid. Replaying from cache.") // Removed for silent replay
 	} else if !isCacheStale && useFallback {
-		fmt.Fprintln(os.Stderr, "Voucher is valid. Replaying from cache (Fallback ignored).")
+		// fmt.Fprintln(os.Stderr, "Voucher is valid. Replaying from cache (Fallback ignored).") // Removed for silent replay
 	}
 
 	replayExitCode, err := replayer.Replay(voucherFile, replayPreserveTiming, speed)
@@ -276,7 +276,6 @@ If the --fallback flag is used, the command following the '--' separator will be
 if the voucher is missing, expired, or malformed.`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("replayCmd args: %v\n", args)
 		voucherFile := args[0]
 
 		// 1. Separate mimic flags from the fallback command

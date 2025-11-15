@@ -31,6 +31,7 @@ func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
 
 // CanonicalCommand is a version of voucher.Command with a sorted Env.
 type CanonicalCommand struct {
+	Raw  string   `yaml:"raw"`
 	Argv []string `yaml:"argv"`
 	Cwd  string   `yaml:"cwd"`
 	Env  []KVPair `yaml:"env,omitempty"`
@@ -42,7 +43,7 @@ type CanonicalVoucher struct {
 	TTL                 voucher.Duration       `yaml:"ttl,omitempty"`
 	MimicVersion        string                 `yaml:"mimic_version"`
 	RecordedAt          voucher.Timestamp      `yaml:"recorded_at"`
-	DurationMs          int                    `yaml:"duration_ms"`
+	DurationNs          int64                  `yaml:"duration_ns"`
 	Command             CanonicalCommand       `yaml:"command"`
 	Stdout              []voucher.OutputChunk  `yaml:"stdout,omitempty"`
 	Stderr              []voucher.OutputChunk  `yaml:"stderr,omitempty"`
@@ -67,8 +68,9 @@ func GetCanonicalVoucher(v voucher.Voucher) CanonicalVoucher {
 		TTL:                 voucher.Duration(v.TTL),
 		MimicVersion:        v.MimicVersion,
 		RecordedAt:          voucher.Timestamp(v.RecordedAt),
-		DurationMs:          v.DurationMs,
+		DurationNs:          v.DurationNs,
 		Command: CanonicalCommand{
+			Raw:  v.Command.Raw,
 			Argv: v.Command.Argv,
 			Cwd:  v.Command.Cwd,
 			Env:  envSlice,
@@ -98,6 +100,10 @@ func GenerateKeyPair(privateKeyPath, publicKeyPath string) error {
 	if err := os.WriteFile(privateKeyPath, pem.EncodeToMemory(pemPrivate), 0600); err != nil {
 		return fmt.Errorf("failed to write private key to %s: %w", privateKeyPath, err)
 	}
+	// Explicitly set permissions as os.WriteFile might not always honor them on some filesystems (e.g., WSL)
+	if err := os.Chmod(privateKeyPath, 0600); err != nil {
+		return fmt.Errorf("failed to set permissions for private key %s: %w", privateKeyPath, err)
+	}
 
 	// Save public key
 	pemPublic := &pem.Block{
@@ -106,6 +112,10 @@ func GenerateKeyPair(privateKeyPath, publicKeyPath string) error {
 	}
 	if err := os.WriteFile(publicKeyPath, pem.EncodeToMemory(pemPublic), 0644); err != nil {
 		return fmt.Errorf("failed to write public key to %s: %w", publicKeyPath, err)
+	}
+	// Explicitly set permissions
+	if err := os.Chmod(publicKeyPath, 0644); err != nil {
+		return fmt.Errorf("failed to set permissions for public key %s: %w", publicKeyPath, err)
 	}
 
 	return nil

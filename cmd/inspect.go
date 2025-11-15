@@ -45,10 +45,19 @@ func runInspectCmd(cmd *cobra.Command, args []string) (int, error) {
 		return 1, fmt.Errorf("failed to unmarshal voucher from %s: %w", voucherFile, err)
 	}
 
-	fmt.Printf("Command: %s\n", strings.Join(v.Command.Argv, " "))
+	if v.Command.Raw != "" {
+		fmt.Printf("Command: %s\n", v.Command.Raw)
+	} else {
+		fmt.Printf("Command: %s\n", strings.Join(v.Command.Argv, " "))
+	}
 	fmt.Printf("Recorded: %s\n", v.RecordedAt.Format(time.RFC3339))
 	fmt.Printf("Exit Code: %d\n", v.ExitCode)
-	fmt.Printf("Duration: %dms\n", v.DurationMs)
+	// Display duration with more precision
+	if v.DurationNs > 0 {
+		fmt.Printf("Duration: %s\n", time.Duration(v.DurationNs).String())
+	} else {
+		fmt.Printf("Duration: 0s\n") // Or "<1ns" if we want to be super precise for 0
+	}
 
 	if len(v.Command.Env) > 0 {
 		fmt.Println("Environment:")

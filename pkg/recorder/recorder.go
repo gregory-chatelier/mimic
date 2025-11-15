@@ -20,7 +20,8 @@ import (
 )
 
 // Record executes a command and records its output and metadata to a voucher file.
-func Record(command []string, outputFile string, envVarsToCapture []string, ttl time.Duration, preserveTiming bool, redactPatterns []string) (*voucher.Voucher, error) {
+// The mimicVersion parameter is used to store the version of the mimic tool that created the voucher.
+func Record(mimicVersion string, rawCommand string, command []string, outputFile string, envVarsToCapture []string, ttl time.Duration, preserveTiming bool, redactPatterns []string) (*voucher.Voucher, error) {
 	cmd := exec.Command(command[0], command[1:]...)
 
 	// Environment variable handling
@@ -41,18 +42,22 @@ func Record(command []string, outputFile string, envVarsToCapture []string, ttl 
 	outputHasher := sha256.New()
 
 	// Create custom writers that will capture chunks
-	var stdoutWriter, stderrWriter io.Writer
+	var recordStdoutWriter, recordStderrWriter io.Writer
 	if preserveTiming {
-		stdoutWriter = NewTimedChunkWriter(&stdoutChunks, &stdoutBuf)
-		stderrWriter = NewTimedChunkWriter(&stderrChunks, &stderrBuf)
+		recordStdoutWriter = NewTimedChunkWriter(&stdoutChunks, &stdoutBuf)
+		recordStderrWriter = NewTimedChunkWriter(&stderrChunks, &stderrBuf)
 	} else {
-		stdoutWriter = &stdoutBuf
-		stderrWriter = &stderrBuf
+		recordStdoutWriter = &stdoutBuf
+		recordStderrWriter = &stderrBuf
 	}
 
-	// Wrap the writers with HashingWriter to update the SHA256 hash
-	cmd.Stdout = NewHashingWriter(stdoutWriter, outputHasher)
-	cmd.Stderr = NewHashingWriter(stderrWriter, outputHasher)
+	// Wrap the recording writers with HashingWriter to update the SHA256 hash
+	hashingStdoutWriter := NewHashingWriter(recordStdoutWriter, outputHasher)
+	hashingStderrWriter := NewHashingWriter(recordStderrWriter, outputHasher)
+
+	// Use io.MultiWriter to tee output to both the recording mechanism and os.Stdout/os.Stderr
+	cmd.Stdout = io.MultiWriter(os.Stdout, hashingStdoutWriter)
+	cmd.Stderr = io.MultiWriter(os.Stderr, hashingStderrWriter)
 
 	startTime := time.Now()
 	err := cmd.Run()
@@ -71,13 +76,13 @@ func Record(command []string, outputFile string, envVarsToCapture []string, ttl 
 	if !preserveTiming {
 		if stdoutBuf.Len() > 0 {
 			stdoutChunks = append(stdoutChunks, voucher.OutputChunk{
-				DelayMs: 0,
+				DelayNs: 0,
 				DataB64: base64.StdEncoding.EncodeToString(stdoutBuf.Bytes()),
 			})
 		}
 		if stderrBuf.Len() > 0 {
 			stderrChunks = append(stderrChunks, voucher.OutputChunk{
-				DelayMs: 0,
+				DelayNs: 0,
 				DataB64: base64.StdEncoding.EncodeToString(stderrBuf.Bytes()),
 			})
 		}
@@ -116,10 +121,11 @@ func Record(command []string, outputFile string, envVarsToCapture []string, ttl 
 
 	// Create voucher
 	v := &voucher.Voucher{
-		MimicVersion: "1.0",
+		MimicVersion: mimicVersion,
 		RecordedAt:   startTime,
-		DurationMs:   int(duration.Milliseconds()),
+		DurationNs:   duration.Nanoseconds(),
 		Command: voucher.Command{
+			Raw:  rawCommand,
 			Argv: command,
 			Cwd:  cmd.Dir, // Will be empty if not set, which is fine
 			Env:  envMap,
@@ -144,8 +150,12 @@ func Record(command []string, outputFile string, envVarsToCapture []string, ttl 
 	if err := os.WriteFile(outputFile, data, 0644); err != nil {
 		return nil, fmt.Errorf("failed to write voucher to file %s: %w", outputFile, err)
 	}
+	// Explicitly set permissions as os.WriteFile might not always honor them on some filesystems (e.g., WSL)
+	if err := os.Chmod(outputFile, 0644); err != nil {
+		return nil, fmt.Errorf("failed to set permissions for voucher file %s: %w", outputFile, err)
+	}
 
-	fmt.Fprintf(os.Stderr, "Voucher recorded to %s\n", outputFile)
+
 
 	return v, nil
 }
@@ -178,7 +188,7 @@ func (w *TimedChunkWriter) Write(p []byte) (n int, err error) {
 
 	// Create a new chunk
 	chunk := voucher.OutputChunk{
-		DelayMs: int(delay.Milliseconds()),
+		DelayNs: delay.Nanoseconds(),
 		DataB64: base64.StdEncoding.EncodeToString(p),
 	}
 	*w.chunks = append(*w.chunks, chunk)

@@ -26,7 +26,7 @@ func Replay(voucherFile string, preserveTiming bool, speed float64) (int, error)
 	// Replay stdout
 	for i, chunk := range v.Stdout {
 		if preserveTiming {
-			time.Sleep(time.Duration(float64(time.Duration(chunk.DelayMs)*time.Millisecond) / speed))
+			time.Sleep(time.Duration(float64(chunk.DelayNs) / speed))
 		}
 		stdout, err := base64.StdEncoding.DecodeString(chunk.DataB64)
 		if err != nil {
@@ -38,7 +38,7 @@ func Replay(voucherFile string, preserveTiming bool, speed float64) (int, error)
 	// Replay stderr
 	for i, chunk := range v.Stderr {
 		if preserveTiming {
-			time.Sleep(time.Duration(float64(time.Duration(chunk.DelayMs)*time.Millisecond) / speed))
+			time.Sleep(time.Duration(float64(chunk.DelayNs) / speed))
 		}
 		stderr, err := base64.StdEncoding.DecodeString(chunk.DataB64)
 		if err != nil {

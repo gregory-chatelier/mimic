@@ -7,11 +7,11 @@ GOTEST=$(GOCMD) test
 GOFMT=$(GOCMD) fmt
 GOVET=$(GOCMD) vet
 
-# Get the latest git tag for the version
-VERSION ?= $(shell git describe --tags --abbrev=0)
+# Get the latest git tag for the version, including commit hash and dirty status
+VERSION ?= $(shell git describe --tags --always --dirty)
 
 # Use ldflags to set the version at build time
-LDFLAGS = -ldflags="-X main.version=$(VERSION)"
+LDFLAGS = -ldflags="-X 'github.com/gregory-chatelier/mimic/cmd.version=$(VERSION)'"
 
 # Linting
 GOLANGCILINT=golangci-lint

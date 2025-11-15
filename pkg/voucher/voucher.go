@@ -13,12 +13,13 @@ type Timestamp time.Time
 
 // OutputChunk represents a timed chunk of output.
 type OutputChunk struct {
-	DelayMs int    `yaml:"delay_ms"`
+	DelayNs int64  `yaml:"delay_ns"`
 	DataB64 string `yaml:"data_b64"`
 }
 
 // Command represents the executed command details.
 type Command struct {
+	Raw  string            `yaml:"raw"` // The exact command string as provided by the user
 	Argv []string          `yaml:"argv"`
 	Cwd  string            `yaml:"cwd"`
 	Env  map[string]string `yaml:"env,omitempty"`
@@ -46,7 +47,7 @@ type Voucher struct {
 	TTL                 time.Duration `yaml:"ttl,omitempty"`
 	MimicVersion        string        `yaml:"mimic_version"`
 	RecordedAt          time.Time     `yaml:"recorded_at"`
-	DurationMs          int           `yaml:"duration_ms"`
+	DurationNs          int64         `yaml:"duration_ns"`
 	Command             Command       `yaml:"command"`
 	Stdout              []OutputChunk `yaml:"stdout,omitempty"`
 	Stderr              []OutputChunk `yaml:"stderr,omitempty"`

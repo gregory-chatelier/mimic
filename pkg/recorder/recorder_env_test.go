@@ -36,7 +36,7 @@ func TestRecord_EnvVarFiltering(t *testing.T) {
 	// Specify to only capture MIMIC_TEST_VAR_1 and MIMIC_TEST_VAR_2
 	envVarsToCapture := []string{"MIMIC_TEST_VAR_1", "MIMIC_TEST_VAR_2"}
 
-	_, err := recorder.Record(cmdArgs, outputFile, envVarsToCapture, 0, false, nil)
+	_, err := recorder.Record("test-version", "echo hello", cmdArgs, outputFile, envVarsToCapture, 0, false, nil)
 	assert.NoError(t, err)
 
 	v := readVoucher(t, outputFile)
@@ -64,7 +64,7 @@ func TestRecord_EnvVarRedaction(t *testing.T) {
 		"my-secret-password",
 	}
 
-	_, err := recorder.Record(cmdArgs, outputFile, nil, 0, false, redactPatterns)
+	_, err := recorder.Record("test-version", "bash -c 'echo $API_KEY'", cmdArgs, outputFile, nil, 0, false, redactPatterns)
 	assert.NoError(t, err)
 
 	v := readVoucher(t, outputFile)
@@ -89,7 +89,7 @@ func TestRecord_NoEnvVars(t *testing.T) {
 	cmdArgs := []string{"echo", "no env test"}
 
 	// Pass an empty slice for envVarsToCapture, which should default to all
-	_, err := recorder.Record(cmdArgs, outputFile, []string{}, 0, false, nil)
+	_, err := recorder.Record("test-version", "echo no env test", cmdArgs, outputFile, []string{}, 0, false, nil)
 	assert.NoError(t, err)
 
 	v := readVoucher(t, outputFile)
@@ -109,7 +109,7 @@ func TestRecord_RedactionDoesNotAffectStdout(t *testing.T) {
 	cmdArgs := []string{"bash", "-c", "echo $SENSITIVE_DATA"}
 	redactPatterns := []string{"this-is-secret"}
 
-	_, err := recorder.Record(cmdArgs, outputFile, nil, 0, false, redactPatterns)
+	_, err := recorder.Record("test-version", "bash -c 'echo $SENSITIVE_DATA'", cmdArgs, outputFile, nil, 0, false, redactPatterns)
 	assert.NoError(t, err)
 
 	v := readVoucher(t, outputFile)
