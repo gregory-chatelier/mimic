@@ -9,11 +9,79 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/gregory-chatelier/mimic/pkg/validation"
 	"github.com/gregory-chatelier/mimic/pkg/voucher"
 	"gopkg.in/yaml.v3"
 )
+
+// KVPair is a key-value pair for sorted environment variables.
+type KVPair struct {
+	Key   string `yaml:"key"`
+	Value string `yaml:"value"`
+}
+
+// ByKey sorts KVPairs by key.
+type ByKey []KVPair
+
+func (a ByKey) Len() int           { return len(a) }
+func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
+
+// CanonicalCommand is a version of voucher.Command with a sorted Env.
+type CanonicalCommand struct {
+	Argv []string `yaml:"argv"`
+	Cwd  string   `yaml:"cwd"`
+	Env  []KVPair `yaml:"env,omitempty"`
+}
+
+// CanonicalVoucher is a version of voucher.Voucher that can be deterministically marshalled.
+type CanonicalVoucher struct {
+	PreviousVoucherHash string                 `yaml:"previous_voucher_hash,omitempty"`
+	TTL                 voucher.Duration       `yaml:"ttl,omitempty"`
+	MimicVersion        string                 `yaml:"mimic_version"`
+	RecordedAt          voucher.Timestamp      `yaml:"recorded_at"`
+	DurationMs          int                    `yaml:"duration_ms"`
+	Command             CanonicalCommand       `yaml:"command"`
+	Stdout              []voucher.OutputChunk  `yaml:"stdout,omitempty"`
+	Stderr              []voucher.OutputChunk  `yaml:"stderr,omitempty"`
+	ExitCode            int                    `yaml:"exit_code"`
+	Metadata            voucher.Metadata       `yaml:"metadata,omitempty"`
+	Signature           voucher.Signature      `yaml:"signature,omitempty"`
+	PreserveTiming      bool                   `yaml:"preserve_timing,omitempty"`
+}
+
+// GetCanonicalVoucher converts a voucher.Voucher into a CanonicalVoucher for signing.
+func GetCanonicalVoucher(v voucher.Voucher) CanonicalVoucher {
+	// Convert map to a slice of KVPair
+	envSlice := make([]KVPair, 0, len(v.Command.Env))
+	for k, val := range v.Command.Env {
+		envSlice = append(envSlice, KVPair{Key: k, Value: val})
+	}
+	// Sort the slice by key for deterministic output
+	sort.Sort(ByKey(envSlice))
+
+	return CanonicalVoucher{
+		PreviousVoucherHash: v.PreviousVoucherHash,
+		TTL:                 voucher.Duration(v.TTL),
+		MimicVersion:        v.MimicVersion,
+		RecordedAt:          voucher.Timestamp(v.RecordedAt),
+		DurationMs:          v.DurationMs,
+		Command: CanonicalCommand{
+			Argv: v.Command.Argv,
+			Cwd:  v.Command.Cwd,
+			Env:  envSlice,
+		},
+		Stdout:         v.Stdout,
+		Stderr:         v.Stderr,
+		ExitCode:       v.ExitCode,
+		Metadata:       v.Metadata,
+		Signature:      v.Signature,
+		PreserveTiming: v.PreserveTiming,
+	}
+}
+
 
 // GenerateKeyPair generates a new Ed25519 private/public key pair and saves them to the specified paths.
 func GenerateKeyPair(privateKeyPath, publicKeyPath string) error {
@@ -115,14 +183,14 @@ func DecodeBase64(s string) ([]byte, error) {
 
 // SignVoucher prepares a voucher for signing, signs it, and returns the final YAML bytes.
 func SignVoucher(v voucher.Voucher, privateKey ed25519.PrivateKey) ([]byte, error) {
-	// 1. Prepare data for signing (clear signature field)
-	signableVoucher := v
-	signableVoucher.Signature = voucher.Signature{}
-	
-	// 2. Marshal the signable voucher to YAML
-	verifiableData, err := yaml.Marshal(signableVoucher)
+	// 1. Create a canonical version of the voucher for signing
+	canonical := GetCanonicalVoucher(v)
+	canonical.Signature = voucher.Signature{} // Clear signature field for signing
+
+	// 2. Marshal the canonical voucher to YAML
+	verifiableData, err := yaml.Marshal(canonical)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal voucher for signing: %w", err)
+		return nil, fmt.Errorf("failed to marshal canonical voucher for signing: %w", err)
 	}
 
 	// 3. Calculate SHA256 checksum
@@ -136,18 +204,18 @@ func SignVoucher(v voucher.Voucher, privateKey ed25519.PrivateKey) ([]byte, erro
 		return nil, fmt.Errorf("failed to sign voucher data: %w", err)
 	}
 
-	// 5. Update the voucher's Signature field
+	// 5. Update the original voucher's Signature field
 	v.Signature = voucher.Signature{
-		Algorithm:    "ed25519",
-		KeyID:        generateKeyID(privateKey.Public().(ed25519.PublicKey)),
-		SignatureB64: EncodeBase64(sig),
+		Algorithm:      "ed25519",
+		KeyID:          generateKeyID(privateKey.Public().(ed25519.PublicKey)),
+		SignatureB64:   EncodeBase64(sig),
 		ChecksumSHA256: checksum,
 	}
 
-	// 6. Marshal the final signed voucher to YAML
+	// 6. Marshal the final signed voucher (the original struct) to YAML
 	finalData, err := yaml.Marshal(v)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal signed voucher: %w", err)
+		return nil, fmt.Errorf("failed to marshal final signed voucher: %w", err)
 	}
 
 	return finalData, nil

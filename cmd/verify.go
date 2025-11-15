@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 
@@ -69,14 +71,25 @@ func runVerifyCmd(cmd *cobra.Command, args []string) (int, error) {
 		return 1, fmt.Errorf("decoding signature: %w", err)
 	}
 
-	// Prepare data for verification (voucher without signature)
-	v.Signature = voucher.Signature{}
-	verifiableData, err := yaml.Marshal(v)
+	// 1. Get the canonical representation of the voucher.
+	canonical := crypto.GetCanonicalVoucher(v)
+	canonical.Signature = voucher.Signature{} // Clear signature for verification.
+
+	// 2. Marshal the canonical voucher to get the verifiable data.
+	verifiableData, err := yaml.Marshal(canonical)
 	if err != nil {
-		return 1, fmt.Errorf("failed to marshal voucher for verification: %w", err)
+		return 1, fmt.Errorf("failed to marshal canonical voucher for verification: %w", err)
 	}
 
-	// Verify signature
+	// 3. Verify the checksum first for a quick integrity check.
+	hasher := sha256.New()
+	hasher.Write(verifiableData)
+	calculatedChecksum := hex.EncodeToString(hasher.Sum(nil))
+	if calculatedChecksum != v.Signature.ChecksumSHA256 {
+		return 1, fmt.Errorf("voucher checksum is invalid! This indicates tampering (expected %s, got %s)", v.Signature.ChecksumSHA256, calculatedChecksum)
+	}
+
+	// 4. Verify the signature.
 	if crypto.VerifySignature(pk, verifiableData, signatureBytes) {
 		fmt.Println("Voucher signature is valid.")
 		return 0, nil

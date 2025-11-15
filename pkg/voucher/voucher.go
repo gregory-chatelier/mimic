@@ -5,6 +5,12 @@ import (
 	"time"
 )
 
+// Duration is a wrapper for time.Duration to ensure consistent marshalling.
+type Duration time.Duration
+
+// Timestamp is a wrapper for time.Time to ensure consistent marshalling.
+type Timestamp time.Time
+
 // OutputChunk represents a timed chunk of output.
 type OutputChunk struct {
 	DelayMs int    `yaml:"delay_ms"`
