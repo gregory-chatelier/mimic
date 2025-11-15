@@ -147,7 +147,7 @@ func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validat
 			}
 
 			// Record the command using the recorder package
-			_, err = recorder.Record(fallbackCmdToExecute, tmpVCRFile.Name(), envVarsToCapture, v.TTL, recordFallbackPreserveTiming, "", []string{})
+			_, err = recorder.Record(fallbackCmdToExecute, tmpVCRFile.Name(), envVarsToCapture, v.TTL, recordFallbackPreserveTiming, []string{})
 
 			if err != nil {
 				return 1, fmt.Errorf("error recording fallback command: %w", err)

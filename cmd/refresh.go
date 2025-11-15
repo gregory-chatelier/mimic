@@ -99,7 +99,7 @@ func runRefreshCmd(cmd *cobra.Command, args []string) (int, error) {
 		envVarsToCapture = []string{} // Capture all env vars if original had them
 	}
 
-	_, err = recorder.Record(cmdToRecord, voucherFile, envVarsToCapture, v.TTL, v.PreserveTiming, voucherFile, []string{})
+	_, err = recorder.Record(cmdToRecord, voucherFile, envVarsToCapture, v.TTL, v.PreserveTiming, []string{})
 	if err != nil {
 		return 1, fmt.Errorf("refreshing voucher: %w", err)
 	}

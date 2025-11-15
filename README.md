@@ -90,7 +90,8 @@ For a full list of flags for each command, use `mimic [command] --help`.
 | `-o, --output`      | Output voucher file (default: auto-named).            |
 | `--sign`            | Sign the voucher with a private key.                  |
 | `--private-key`     | Path to the private key for signing.                  |
-| `--with-env`        | Include environment variables in the recording.       |
+| `--env-vars`        | Comma-separated list of environment variables to include in the recording (e.g., `PATH,HOME`). If omitted, all environment variables are included. |
+| `--redact-patterns` | Comma-separated list of regex patterns to redact sensitive information from recorded environment variables (e.g., `(?i)password=.*,API_KEY=.*`). |
 | `--preserve-timing` | Record time intervals between outputs.                |
 | `--ttl`             | Expire voucher after a specified duration (e.g., `24h`). |
 

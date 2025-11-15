@@ -14,21 +14,22 @@ import (
 )
 
 var (
-	outputFile      string
-	signVoucher     bool
-	privateKeyPath  string
-	withEnv         bool
-	ttl             string
-	preserveTiming  bool
-	prevVoucherPath string
-	redactPatterns  []string
+	outputFile       string
+	signVoucher      bool
+	privateKeyPath   string
+	envVarsToCapture []string
+	ttl              string
+	preserveTiming   bool
+	redactPatterns   []string
 )
 
 var recordCmd = &cobra.Command{
 	Use:   "record [flags] -- <command> [args...]",
 	Short: "Record a command's behavior and save it to a .vcr file",
 	Long: `The record command executes a given shell command, captures its standard output, standard error, exit code, and environment metadata,
-and stores it as a cryptographically verifiable voucher (.vcr file).`,
+and stores it as a cryptographically verifiable voucher (.vcr file).
+
+Environment variables can be selectively included using --env-vars and sensitive information within them can be redacted using --redact-patterns.`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if exitCode, err := runRecordCmd(cmd, args); err != nil {
@@ -73,12 +74,6 @@ func runRecordCmd(cmd *cobra.Command, args []string) (int, error) {
 		}
 	}
 
-	if prevVoucherPath != "" {
-		if err := validation.ValidateFileExists(prevVoucherPath, "Previous voucher file"); err != nil {
-			return 1, err
-		}
-	}
-
 	if outputFile == "" {
 		// Default output file name based on the command
 		outputFile = strings.ReplaceAll(cmdToRecord[0], " ", "_") + ".vcr"
@@ -102,12 +97,7 @@ func runRecordCmd(cmd *cobra.Command, args []string) (int, error) {
 		return 1, fmt.Errorf("TTL must be between %v and %v (or 0 for no expiration)", MinTTL, MaxTTL)
 	}
 
-	var envVarsToCapture []string
-	if withEnv {
-		envVarsToCapture = []string{recorder.CaptureAllEnvVars} // Use constant for clarity
-	}
-
-	v, err := recorder.Record(cmdToRecord, outputFile, envVarsToCapture, durationTTL, preserveTiming, prevVoucherPath, redactPatterns)
+	v, err := recorder.Record(cmdToRecord, outputFile, envVarsToCapture, durationTTL, preserveTiming, redactPatterns)
 	if err != nil {
 		return 1, fmt.Errorf("recording command: %w", err)
 	}
@@ -140,12 +130,11 @@ func runRecordCmd(cmd *cobra.Command, args []string) (int, error) {
 func init() {
 	recordCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output voucher file (default: auto-named)")
 	recordCmd.Flags().BoolVar(&signVoucher, "sign", false, "Sign the voucher with a private key")
-	recordCmd.Flags().StringVar(&privateKeyPath, "private-key", "", "Path to the private key for signing")
-	recordCmd.Flags().BoolVar(&withEnv, "with-env", false, "Include environment variables in the recording")
+	recordCmd.Flags().StringVar(&privateKeyPath, "private-key", "mimic.key", "Path to the private key for signing")
+	recordCmd.Flags().StringArrayVar(&envVarsToCapture, "env-vars", nil, "Specify environment variables to include (e.g., --env-vars PATH,HOME). If empty, all are included.")
 	recordCmd.Flags().StringVar(&ttl, "ttl", "", "Expire voucher after a specified duration (e.g., '24h')")
 	recordCmd.Flags().BoolVar(&preserveTiming, "preserve-timing", false, "Record time intervals between outputs")
-	recordCmd.Flags().StringVar(&prevVoucherPath, "prev-voucher", "", "Path to a previous voucher to use for comparison (for refresh command)")
-	recordCmd.Flags().StringArrayVar(&redactPatterns, "redact", []string{}, "Redact sensitive information from the voucher using regex patterns")
+	recordCmd.Flags().StringArrayVar(&redactPatterns, "redact-patterns", []string{}, "Specify regex patterns to redact sensitive information from recorded environment variables (e.g., --redact-patterns \"(?i)password=.*\", \"API_KEY=.*\")")
 }
 
 

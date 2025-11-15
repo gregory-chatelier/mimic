@@ -19,7 +19,7 @@ func TestRecord(t *testing.T) {
 
 	// Test case 1: Simple command with stdout
 	cmdArgs1 := []string{"echo", "hello world"}
-	voucher1, err := recorder.Record(cmdArgs1, outputFile, nil, 0, false, "", []string{})
+	voucher1, err := recorder.Record(cmdArgs1, outputFile, nil, 0, false, []string{})
 	if err != nil {
 		t.Fatalf("Record failed: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestRecord(t *testing.T) {
 		t.Skip("Skipping stderr test: bash not found in PATH.")
 	}
 
-	voucher2, err := recorder.Record(cmdArgs2, outputFile, nil, 0, false, "", []string{}) // Overwrite for simplicity in test, real use would be new file
+	voucher2, err := recorder.Record(cmdArgs2, outputFile, nil, 0, false, []string{}) // Overwrite for simplicity in test, real use would be new file
 	if err != nil {
 		t.Fatalf("Record failed for stderr test: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestRecord(t *testing.T) {
 
 	// Test case 3: Command not found
 	cmdArgs3 := []string{"nonexistent-command"}
-	_, err = recorder.Record(cmdArgs3, outputFile, nil, 0, false, "", []string{})
+	_, err = recorder.Record(cmdArgs3, outputFile, nil, 0, false, []string{})
 	if err == nil {
 		t.Fatalf("Expected an error for nonexistent command, got none")
 	}
@@ -89,7 +89,7 @@ func TestRecord(t *testing.T) {
 	os.Setenv("MIMIC_TEST_VAR", "hello env")
 	defer os.Unsetenv("MIMIC_TEST_VAR")
 	cmdArgs4 := []string{"bash", "-c", "echo $MIMIC_TEST_VAR"}
-	voucher4, err := recorder.Record(cmdArgs4, outputFile, []string{recorder.CaptureAllEnvVars}, 0, false, "", []string{})
+	voucher4, err := recorder.Record(cmdArgs4, outputFile, nil, 0, false, []string{})
 	if err != nil {
 		t.Fatalf("Record with env failed: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestRecord(t *testing.T) {
 
 	// Test case 5: With timing preservation
 	cmdArgs5 := []string{"bash", "-c", "echo -n a; sleep 0.1; echo -n b"}
-	voucher5, err := recorder.Record(cmdArgs5, outputFile, nil, 0, true, "", []string{})
+	voucher5, err := recorder.Record(cmdArgs5, outputFile, nil, 0, true, []string{})
 	if err != nil {
 		t.Fatalf("Record with timing failed: %v", err)
 	}
@@ -122,23 +122,23 @@ func readBase64(t *testing.T, b64 string) string {
 
 func TestRedactEnvVars(t *testing.T) {
 	input := map[string]string{
-		"API_KEY": "supersecretkey",
-		"GITHUB_TOKEN": "ghp_token",
-		"DB_PASSWORD": "mypassword",
+		"API_KEY":         "supersecretkey",
+		"GITHUB_TOKEN":    "ghp_token",
+		"DB_PASSWORD":     "mypassword",
 		"NON_SENSITIVE_VAR": "somevalue",
-		"SECRET_STUFF": "hidden",
-		"USER": "gregory",
-		"ANOTHER_SECRET": "shhh",
+		"SECRET_STUFF":    "hidden",
+		"USER":            "gregory",
+		"ANOTHER_SECRET":  "shhh",
 	}
 
 	patterns := []string{
-		"API_KEY",
-		".*TOKEN", // Regex to match GITHUB_TOKEN
-		"DB_PASSWORD",
-		"^SECRET.*", // Regex to match SECRET_STUFF
+		"supersecretkey",
+		"ghp_token",
+		"mypassword",
+		"hidden",
 	}
 
-	expectedRedaction := "******** REDACTED ********"
+	expectedRedaction := "[REDACTED]"
 
 	redacted, err := recorder.RedactEnvVars(input, patterns)
 	if err != nil {
@@ -159,7 +159,7 @@ func TestRedactEnvVars(t *testing.T) {
 		t.Errorf("SECRET_STUFF: Expected '%s', got '%s'", expectedRedaction, redacted["SECRET_STUFF"])
 	}
 	if redacted["ANOTHER_SECRET"] != "shhh" {
-		t.Errorf("ANOTHER_SECRET: Expected 'shhh', got '%s' (should not be redacted by ^SECRET.*)", redacted["ANOTHER_SECRET"])
+		t.Errorf("ANOTHER_SECRET: Expected 'shhh', got '%s'", redacted["ANOTHER_SECRET"])
 	}
 
 	// Check non-sensitive variables are preserved

@@ -16,26 +16,19 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const (
-	// CaptureAllEnvVars is a special value to indicate all environment variables should be captured.
-	CaptureAllEnvVars = "*"
-)
-
 // Record executes a command and records its output and metadata to a voucher file.
-func Record(command []string, outputFile string, envVarsToCapture []string, ttl time.Duration, preserveTiming bool, prevVoucherPath string, redactPatterns []string) (*voucher.Voucher, error) {
+func Record(command []string, outputFile string, envVarsToCapture []string, ttl time.Duration, preserveTiming bool, redactPatterns []string) (*voucher.Voucher, error) {
 	cmd := exec.Command(command[0], command[1:]...)
 
 	// Environment variable handling
 	if len(envVarsToCapture) > 0 {
-		if envVarsToCapture[0] == CaptureAllEnvVars {
-			cmd.Env = os.Environ()
-		} else {
-			for _, key := range envVarsToCapture {
-				if value, ok := os.LookupEnv(key); ok {
-					cmd.Env = append(cmd.Env, key+"="+value)
-				}
+		for _, key := range envVarsToCapture {
+			if value, ok := os.LookupEnv(key); ok {
+				cmd.Env = append(cmd.Env, key+"="+value)
 			}
 		}
+	} else {
+		cmd.Env = os.Environ()
 	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
@@ -67,59 +60,47 @@ func Record(command []string, outputFile string, envVarsToCapture []string, ttl 
 		}
 	}
 
-	// Redact sensitive information if patterns are provided
-	redactFn := func(content []byte) []byte {
-		if len(redactPatterns) == 0 {
-			return content
-		}
-		redactedContent := string(content)
-		for _, pattern := range redactPatterns {
-			re := regexp.MustCompile(pattern)
-			redactedContent = re.ReplaceAllString(redactedContent, "[REDACTED]")
-		}
-		return []byte(redactedContent)
-	}
-
 	// If not preserving timing, create single chunks from the buffers
 	if !preserveTiming {
 		if stdoutBuf.Len() > 0 {
 			stdoutChunks = append(stdoutChunks, voucher.OutputChunk{
 				DelayMs: 0,
-				DataB64: base64.StdEncoding.EncodeToString(redactFn(stdoutBuf.Bytes())),
+				DataB64: base64.StdEncoding.EncodeToString(stdoutBuf.Bytes()),
 			})
 		}
 		if stderrBuf.Len() > 0 {
 			stderrChunks = append(stderrChunks, voucher.OutputChunk{
 				DelayMs: 0,
-				DataB64: base64.StdEncoding.EncodeToString(redactFn(stderrBuf.Bytes())),
+				DataB64: base64.StdEncoding.EncodeToString(stderrBuf.Bytes()),
 			})
-		}
-	} else {
-		// Redact content within existing timed chunks
-		for i := range stdoutChunks {
-			decoded, _ := base64.StdEncoding.DecodeString(stdoutChunks[i].DataB64)
-			stdoutChunks[i].DataB64 = base64.StdEncoding.EncodeToString(redactFn(decoded))
-		}
-		for i := range stderrChunks {
-			decoded, _ := base64.StdEncoding.DecodeString(stderrChunks[i].DataB64)
-			stderrChunks[i].DataB64 = base64.StdEncoding.EncodeToString(redactFn(decoded))
 		}
 	}
 
 	// Environment map for voucher
 	envMap := make(map[string]string)
-	if len(envVarsToCapture) > 0 {
-		if envVarsToCapture[0] == CaptureAllEnvVars {
-			for _, e := range os.Environ() {
-				pair := strings.SplitN(e, "=", 2)
+	if envVarsToCapture == nil || len(envVarsToCapture) == 0 {
+		// Capture all environment variables
+		for _, e := range os.Environ() {
+			pair := strings.SplitN(e, "=", 2)
+			if len(pair) == 2 {
 				envMap[pair[0]] = pair[1]
 			}
-		} else {
-			for _, key := range envVarsToCapture {
-				if value, ok := os.LookupEnv(key); ok {
-					envMap[key] = value
-				}
+		}
+	} else {
+		// Capture only specified environment variables
+		for _, key := range envVarsToCapture {
+			if value, ok := os.LookupEnv(key); ok {
+				envMap[key] = value
 			}
+		}
+	}
+
+	// Redact environment variables if patterns are provided
+	if len(redactPatterns) > 0 {
+		var err error
+		envMap, err = RedactEnvVars(envMap, redactPatterns)
+		if err != nil {
+			return nil, fmt.Errorf("redacting environment variables: %w", err)
 		}
 	}
 
@@ -197,10 +178,14 @@ func (w *TimedChunkWriter) Write(p []byte) (n int, err error) {
 
 // RedactEnvVars masks sensitive environment variable values based on provided patterns.
 func RedactEnvVars(envVars map[string]string, patterns []string) (map[string]string, error) {
-	redacted := make(map[string]string, len(envVars))
-	redactionString := "******** REDACTED ********"
+	if len(patterns) == 0 {
+		return envVars, nil
+	}
 
-	// Compile all patterns into a list of regex objects
+	redacted := make(map[string]string, len(envVars))
+	redactionString := "[REDACTED]"
+
+	// Compile all patterns once
 	var regexes []*regexp.Regexp
 	for _, p := range patterns {
 		r, err := regexp.Compile(p)
@@ -210,20 +195,14 @@ func RedactEnvVars(envVars map[string]string, patterns []string) (map[string]str
 		regexes = append(regexes, r)
 	}
 
+	// Iterate over a copy of the map to avoid issues with map iteration
 	for k, v := range envVars {
-		isSensitive := false
+		redactedValue := v
 		for _, r := range regexes {
-			if r.MatchString(k) {
-				isSensitive = true
-				break
-			}
+			redactedValue = r.ReplaceAllString(redactedValue, redactionString)
 		}
-
-		if isSensitive {
-			redacted[k] = redactionString
-		} else {
-			redacted[k] = v
-		}
+		redacted[k] = redactedValue
 	}
+
 	return redacted, nil
 }

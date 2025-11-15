@@ -137,21 +137,24 @@ echo "<<< Command finished."
 
 wait_for_keypress
 
-# 11. Record a command with environment variables
-echo "\n--- 11. Recording a command with environment variables ---"
-echo "\n>>> Running: ./$APP_NAME record -o $DEMO_DIR/env_test.vcr --with-env -- bash -c 'echo \"My custom var: $MY_CUSTOM_VAR\"'"
-"$APP_NAME" record -o "$DEMO_DIR/env_test.vcr" --with-env -- bash -c 'echo "My custom var: $MY_CUSTOM_VAR"'
+# 11. Record a command with all environment variables
+echo "\n--- 11. Record a command with all environment variables ---"
+echo "\n>>> Setting test environment variable: MY_CUSTOM_VAR"
+export MY_CUSTOM_VAR="This is a test"
+echo "\n>>> Running: $APP_NAME record -o $DEMO_DIR/env_test.vcr -- bash -c 'echo \"My custom var: $MY_CUSTOM_VAR\"'"
+"$APP_NAME" record -o "$DEMO_DIR/env_test.vcr" -- bash -c 'echo "My custom var: $MY_CUSTOM_VAR"'
 echo "<<< Command finished."
-echo "\n>>> Running: ./$APP_NAME inspect $DEMO_DIR/env_test.vcr"
+echo "\n>>> Running: $APP_NAME inspect $DEMO_DIR/env_test.vcr"
 "$APP_NAME" inspect "$DEMO_DIR/env_test.vcr"
-echo "<<< Command finished."
+echo "<<< Command finished. Note that MY_CUSTOM_VAR and all other env vars are recorded."
 
 wait_for_keypress
 
 echo "\n--- 11b. Replaying the command with environment variables ---"
-echo "\n>>> Running: MY_CUSTOM_VAR='Hello from outside!' ./$APP_NAME replay $DEMO_DIR/env_test.vcr"
-MY_CUSTOM_VAR='Hello from outside!' "$APP_NAME" replay "$DEMO_DIR/env_test.vcr"
+echo "\n>>> Running: $APP_NAME replay $DEMO_DIR/env_test.vcr"
+"$APP_NAME" replay "$DEMO_DIR/env_test.vcr"
 echo "<<< Command finished."
+unset MY_CUSTOM_VAR
 
 wait_for_keypress
 
@@ -198,6 +201,45 @@ echo "<<< Command finished."
 echo "\n>>> Running: ./$APP_NAME inspect $DEMO_DIR/stale_cache.vcr"
 "$APP_NAME" inspect "$DEMO_DIR/stale_cache.vcr"
 echo "<<< Command finished."
+
+wait_for_keypress
+
+# 13. Record with selective environment variables
+echo "\n--- 13. Recording with selective environment variables ---"
+echo "\n>>> Setting test environment variables: MIMIC_USER, MIMIC_TOKEN, MIMIC_HOST"
+export MIMIC_USER="test-user"
+export MIMIC_TOKEN="secret-token-123"
+export MIMIC_HOST="localhost"
+echo "\n>>> Running: $APP_NAME record -o $DEMO_DIR/selective_env.vcr --env-vars MIMIC_USER,MIMIC_HOST -- bash -c 'echo \"User: $MIMIC_USER, Host: $MIMIC_HOST\"'"
+"$APP_NAME" record -o "$DEMO_DIR/selective_env.vcr" --env-vars "MIMIC_USER,MIMIC_HOST" -- bash -c 'echo "User: $MIMIC_USER, Host: $MIMIC_HOST"'
+echo "<<< Command finished."
+echo "\n>>> Running: $APP_NAME inspect $DEMO_DIR/selective_env.vcr"
+"$APP_NAME" inspect "$DEMO_DIR/selective_env.vcr"
+echo "<<< Command finished. Note that MIMIC_TOKEN was not recorded."
+unset MIMIC_USER MIMIC_TOKEN MIMIC_HOST
+
+wait_for_keypress
+
+# 14. Record with environment variable redaction
+echo "\n--- 14. Recording with environment variable redaction ---"
+echo "\n>>> Setting sensitive environment variable: API_KEY"
+export API_KEY="abc-123-xyz-789"
+echo "\n>>> Running: $APP_NAME record -o $DEMO_DIR/redacted_env.vcr --env-vars API_KEY --redact-patterns \"abc-123-xyz-789\" -- bash -c 'echo \"Using API Key: $API_KEY\"'"
+"$APP_NAME" record -o "$DEMO_DIR/redacted_env.vcr" --env-vars "API_KEY" --redact-patterns "abc-123-xyz-789" -- bash -c 'echo "Using API Key: $API_KEY"'
+echo "<<< Command finished."
+echo "\n>>> Running: $APP_NAME inspect $DEMO_DIR/redacted_env.vcr"
+"$APP_NAME" inspect "$DEMO_DIR/redacted_env.vcr"
+echo "<<< Command finished. Note that the API_KEY value is redacted in the voucher's environment metadata."
+
+wait_for_keypress
+
+echo "\n--- 14b. Replaying the command with redacted env ---"
+echo "\n>>> Running: $APP_NAME replay $DEMO_DIR/redacted_env.vcr"
+"$APP_NAME" replay "$DEMO_DIR/redacted_env.vcr"
+echo "<<< Command finished. Note that the replayed output is still the original, unredacted value."
+unset API_KEY
+
+wait_for_keypress
 
 echo "======================================="
 echo "  Demo Script Finished!"

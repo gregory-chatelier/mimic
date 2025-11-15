@@ -1,6 +1,7 @@
 package voucher
 
 import (
+	"encoding/base64"
 	"time"
 )
 
@@ -47,4 +48,22 @@ type Voucher struct {
 	Metadata            Metadata      `yaml:"metadata,omitempty"`
 	Signature           Signature     `yaml:"signature,omitempty"`
 	PreserveTiming      bool          `yaml:"preserve_timing,omitempty"` // New field
+}
+
+// GetDecodedStdout is a helper method on the voucher for tests
+func (v *Voucher) GetDecodedStdout() ([]byte, error) {
+	var stdout []byte
+	for _, chunk := range v.Stdout {
+		decoded, err := DecodeChunkData(chunk.DataB64)
+		if err != nil {
+			return nil, err
+		}
+		stdout = append(stdout, decoded...)
+	}
+	return stdout, nil
+}
+
+// DecodeChunkData is a helper in the voucher package for tests
+func DecodeChunkData(dataB64 string) ([]byte, error) {
+	return base64.StdEncoding.DecodeString(dataB64)
 }
