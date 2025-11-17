@@ -258,4 +258,15 @@ echo "======================================="
 # ./mimic record -o demo_build.vcr --preserve-timing -- bash -c 'echo "Starting build..."; sleep 10; echo "Build complete."'
 # ./mimic replay demo_build.vcr --preserve-timing --speed 2
 
+# Self-healing cache with TTL:
+
+# Approach 1: Record with TTL, then replay with fallback (requires pre-recording)
+# ./mimic record -o npm-audit.vcr --ttl 1d -- npm audit
+# ./mimic replay npm-audit.vcr --fallback -- npm audit
+# (If voucher is > 1d old, fallback re-executes and refreshes cache)
+
+# Approach 2: Full auto-caching with TTL (no pre-recording needed)
 # ./mimic replay npm-audit.vcr --fallback --ttl 1d -- npm audit
+# (First call: cache miss → creates cache with 1d TTL)
+# (Second call < 1d: cache hit → instant replay)
+# (Third call > 1d: cache stale → fallback refreshes with new 1d TTL)

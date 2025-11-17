@@ -87,7 +87,7 @@ exit_code: 42
 		var exitCode int
 		var err error
 		stdout, stderr := captureOutput(t, func() {
-			exitCode, err = cmd.RunReplayCommand(voucherFile1, nil, false, "", "", false, false)
+			exitCode, err = cmd.RunReplayCommand(voucherFile1, nil, false, "", "", false, false, "", false)
 		})
 
 		if err != nil {
@@ -110,7 +110,7 @@ exit_code: 42
 		var exitCode int
 		var err error
 		_, _ = captureOutput(t, func() {
-			exitCode, err = cmd.RunReplayCommand(missingFile, nil, false, "", "", false, false)
+			exitCode, err = cmd.RunReplayCommand(missingFile, nil, false, "", "", false, false, "", false)
 		})
 
 		if err == nil {
@@ -137,7 +137,7 @@ func TestReplayFallback(t *testing.T) {
 		var exitCode int
 		var err error
 		stdout, stderr := captureOutput(t, func() {
-			exitCode, err = cmd.RunReplayCommand(voucherFile, fallbackCmdToExecute, false, "", "", true, false)
+			exitCode, err = cmd.RunReplayCommand(voucherFile, fallbackCmdToExecute, false, "", "", true, false, "", false)
 		})
 
 		if err != nil {
@@ -194,7 +194,7 @@ ttl: 1s
 		var exitCode int
 		var err error
 		stdout, stderr := captureOutput(t, func() {
-			exitCode, err = cmd.RunReplayCommand(voucherFile, fallbackCmdToExecute, true, publicKeyPath, privateKeyPath, true, false)
+			exitCode, err = cmd.RunReplayCommand(voucherFile, fallbackCmdToExecute, true, publicKeyPath, privateKeyPath, true, false, "", false)
 		})
 
 		if err != nil {

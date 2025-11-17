@@ -21,13 +21,15 @@ var (
 	replayPreserveTiming bool
 	speed                float64
 	useFallback          bool
-	requireSignature     bool // New flag
+	requireSignature     bool
+	fallbackTTL          string // TTL for voucher created by fallback
+	fallbackSign         bool   // Whether to sign the voucher created by fallback
 )
 
 // RunReplayCommand contains the core logic for the replay command,
 // returning the exit code and an error, rather than calling os.Exit directly.
-func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validateVoucher bool, publicKeyPath string, privateKeyPath string, useFallback bool, requireSignature bool) (int, error) {
-	if err := validateReplayFlags(speed, validateVoucher, requireSignature, publicKeyPath, useFallback, privateKeyPath); err != nil {
+func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validateVoucher bool, publicKeyPath string, privateKeyPath string, useFallback bool, requireSignature bool, fallbackTTL string, fallbackSign bool) (int, error) {
+	if err := validateReplayFlags(speed, validateVoucher, requireSignature, publicKeyPath, useFallback, privateKeyPath, fallbackSign); err != nil {
 		return 1, err
 	}
 
@@ -46,7 +48,7 @@ func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validat
 
 	if isCacheStale {
 		if useFallback {
-			return handleFallback(voucherFile, fallbackCmdToExecute, privateKeyPath, v)
+			return handleFallback(voucherFile, fallbackCmdToExecute, privateKeyPath, v, fallbackTTL, fallbackSign)
 		}
 		return 1, fmt.Errorf("voucher is missing, malformed, or expired, and no fallback was provided")
 	}
@@ -54,7 +56,7 @@ func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validat
 	return replayer.Replay(voucherFile, replayPreserveTiming, speed)
 }
 
-func validateReplayFlags(speed float64, validateVoucher bool, requireSignature bool, publicKeyPath string, useFallback bool, privateKeyPath string) error {
+func validateReplayFlags(speed float64, validateVoucher bool, requireSignature bool, publicKeyPath string, useFallback bool, privateKeyPath string, fallbackSign bool) error {
 	if speed <= 0 {
 		return fmt.Errorf("the --speed multiplier must be greater than 0")
 	}
@@ -66,7 +68,8 @@ func validateReplayFlags(speed float64, validateVoucher bool, requireSignature b
 			return err
 		}
 	}
-	if useFallback && privateKeyPath != "" {
+	// Only require private key if fallback AND fallbackSign are enabled
+	if useFallback && fallbackSign && privateKeyPath != "" {
 		if err := validation.ValidateFileExists(privateKeyPath, "Private key file"); err != nil {
 			return fmt.Errorf("%w for re-signing on fallback", err)
 		}
@@ -86,7 +89,7 @@ func loadVoucher(voucherFile string) (*voucher.Voucher, error) {
 	return &v, nil
 }
 
-func handleFallback(voucherFile string, fallbackCmdToExecute []string, privateKeyPath string, v *voucher.Voucher) (int, error) {
+func handleFallback(voucherFile string, fallbackCmdToExecute []string, privateKeyPath string, v *voucher.Voucher, fallbackTTL string, fallbackSign bool) (int, error) {
 	if len(fallbackCmdToExecute) == 0 {
 		return 1, fmt.Errorf("--fallback flag used, but no command provided after '--'")
 	}
@@ -113,7 +116,15 @@ func handleFallback(voucherFile string, fallbackCmdToExecute []string, privateKe
 
 	// Record the command using the recorder package
 	var ttl time.Duration
-	if v != nil {
+	if fallbackTTL != "" {
+		// Use --ttl flag from replay if provided
+		d, err := parseDurationWithDays(fallbackTTL)
+		if err != nil {
+			return 1, fmt.Errorf("parsing fallback TTL duration: %w", err)
+		}
+		ttl = d
+	} else if v != nil {
+		// Otherwise use TTL from existing voucher
 		ttl = v.TTL
 	}
 	_, err = recorder.Record(version, strings.Join(fallbackCmdToExecute, " "), fallbackCmdToExecute, tmpVCRFile.Name(), envVarsToCapture, ttl, recordFallbackPreserveTiming, []string{})
@@ -127,8 +138,8 @@ func handleFallback(voucherFile string, fallbackCmdToExecute []string, privateKe
 		return 1, fmt.Errorf("error reading temporary fallback voucher: %w", err)
 	}
 
-	// Implement re-signing logic if a private key is provided
-	if privateKeyPath != "" {
+	// Implement re-signing logic only if a private key is provided AND fallbackSign is enabled
+	if fallbackSign && privateKeyPath != "" {
 		// Load the newly recorded voucher from the temporary file
 		var newVoucher voucher.Voucher
 		if err := yaml.Unmarshal(finalData, &newVoucher); err != nil {
@@ -171,21 +182,17 @@ if the voucher is missing, expired, or malformed.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		voucherFile := args[0]
 
-		// 1. Separate mimic flags from the fallback command
-		separatorIdx := -1
-		for i, arg := range args {
-			if arg == "--" {
-				separatorIdx = i
-				break
-			}
-		}
-
+		// Use Cobra's native ArgsLenAtDash() to properly handle the '--' separator.
+		// This correctly identifies where the '--' separator appears, if at all.
+		dashIdx := cmd.ArgsLenAtDash()
 		var fallbackCmdToExecute []string
-		if separatorIdx != -1 {
-			fallbackCmdToExecute = args[separatorIdx+1:]
+
+		if useFallback && dashIdx >= 0 && dashIdx < len(args) {
+			// Args after '--' are the fallback command
+			fallbackCmdToExecute = args[dashIdx:]
 		}
 
-		exitCode, err := RunReplayCommand(voucherFile, fallbackCmdToExecute, validateVoucher, publicKeyPath, privateKeyPath, useFallback, requireSignature)
+		exitCode, err := RunReplayCommand(voucherFile, fallbackCmdToExecute, validateVoucher, publicKeyPath, privateKeyPath, useFallback, requireSignature, fallbackTTL, fallbackSign)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		}
@@ -196,9 +203,11 @@ if the voucher is missing, expired, or malformed.`,
 func init() {
 	replayCmd.Flags().BoolVarP(&validateVoucher, "validate", "v", false, "Verify signature and integrity before replay")
 	replayCmd.Flags().StringVarP(&publicKeyPath, "public-key", "p", "", "Path to the public key for verification")
-	replayCmd.Flags().StringVar(&privateKeyPath, "private-key", "mimic.key", "Path to the private key for re-signing on fallback")
+	replayCmd.Flags().StringVar(&privateKeyPath, "private-key", "", "Path to the private key for re-signing on fallback (only used with --sign)")
 	replayCmd.Flags().BoolVarP(&replayPreserveTiming, "preserve-timing", "t", false, "Simulate original timing delays")
 	replayCmd.Flags().Float64VarP(&speed, "speed", "s", 1.0, "Adjust playback speed (e.g., 0.5 to slow down, 2.0 to speed up)")
 	replayCmd.Flags().BoolVar(&useFallback, "fallback", false, "Execute real command to refresh cache if voucher is missing or invalid")
+	replayCmd.Flags().BoolVar(&fallbackSign, "sign", false, "Sign the voucher created by fallback with the private key")
 	replayCmd.Flags().BoolVar(&requireSignature, "require-signature", false, "Require the voucher to be signed for replay")
+	replayCmd.Flags().StringVar(&fallbackTTL, "ttl", "", "TTL for voucher created by fallback (e.g., '24h', '1d'). If omitted, voucher never expires.")
 }

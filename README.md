@@ -93,7 +93,7 @@ For a full list of flags for each command, use `mimic [command] --help`.
 | `--env-vars`        | Comma-separated list of environment variables to include in the recording (e.g., `PATH,HOME`). If omitted, all environment variables are included. |
 | `--redact-patterns` | Comma-separated list of regex patterns to redact sensitive information from recorded environment variables (e.g., `(?i)password=.*,API_KEY=.*`). |
 | `--preserve-timing` | Record time intervals between outputs.                |
-| `--ttl`             | Expire voucher after a specified duration (e.g., `24h`). |
+| `--ttl`             | Expire voucher after a specified duration (e.g., `24h`, `1d`, `30m`). Supported units: `s` (seconds), `m` (minutes), `h` (hours), `d` (days). |
 
 #### `replay` Flags
 
@@ -104,6 +104,9 @@ For a full list of flags for each command, use `mimic [command] --help`.
 | `-t, --preserve-timing` | Simulate original timing delays.                             |
 | `-s, --speed`       | Adjust playback speed (e.g., 0.5 to slow down, 2.0 to speed up). |
 | `--fallback`        | Execute real command to refresh cache if voucher is missing or invalid. |
+| `--sign`            | Sign the voucher created by fallback with the private key.   |
+| `--private-key`     | Path to the private key for re-signing fallback-created vouchers (only used with `--sign`). |
+| `--ttl`             | TTL for voucher created by fallback (e.g., `24h`, `1d`, `30m`). If omitted, inherits TTL from existing voucher or creates with no expiration. Supported units: `s` (seconds), `m` (minutes), `h` (hours), `d` (days). |
 | `--require-signature` | Require the voucher to be signed for replay.                 |
 
 #### `verify` Flags

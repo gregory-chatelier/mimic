@@ -40,22 +40,17 @@ Environment variables can be selectively included using --env-vars and sensitive
 }
 
 func runRecordCmd(cmd *cobra.Command, args []string) (int, error) {
-	// Find the position of '--' to separate mimic flags from the command to be recorded
-	separatorIdx := -1
-	for i, arg := range args {
-		if arg == "--" {
-			separatorIdx = i
-			break
-		}
-	}
+	// Use Cobra's native ArgsLenAtDash() to properly handle the '--' separator
+	dashIdx := cmd.ArgsLenAtDash()
 
 	var cmdToRecord []string
 	var rawCommandString string
 
-	if separatorIdx != -1 {
-		cmdToRecord = args[separatorIdx+1:]
+	if dashIdx >= 0 && dashIdx < len(args) {
+		// Command starts after '--'
+		cmdToRecord = args[dashIdx:]
 		rawCommandString = strings.Join(cmdToRecord, " ")
-	} else {
+	} else if len(args) > 0 {
 		// If no '--' is found, assume all args are part of the command to record
 		cmdToRecord = args
 		rawCommandString = strings.Join(cmdToRecord, " ")
