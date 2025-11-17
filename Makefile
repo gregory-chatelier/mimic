@@ -49,7 +49,7 @@ lint: vet
 
 # Cross-compile for all target platforms
 release: 
-	@./build.sh
+	./build.sh
 
 # Clean up build artifacts
 clean:
