@@ -245,3 +245,17 @@ wait_for_keypress
 echo "======================================="
 echo "  Demo Script Finished!"
 echo "======================================="
+
+
+# Additional Examples from the README
+
+# docker run --name mimic-postgres -e POSTGRES_PASSWORD=whatapassword -d postgres
+# docker exec mimic-postgres psql -U postgres -c "SELECT * FROM pg_tables"
+# ./mimic record -o audit.vcr --sign --private-key mimic.key -- docker exec mimic-postgres psql -U postgres -c "SELECT * FROM pg_tables"
+# docker stop mimic-postgres
+# docker rm mimic-postgres
+
+# ./mimic record -o demo_build.vcr --preserve-timing -- bash -c 'echo "Starting build..."; sleep 10; echo "Build complete."'
+# ./mimic replay demo_build.vcr --preserve-timing --speed 2
+
+# ./mimic replay npm-audit.vcr --fallback --ttl 1d -- npm audit
