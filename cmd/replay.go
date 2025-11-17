@@ -26,7 +26,7 @@ var (
 
 // RunReplayCommand contains the core logic for the replay command,
 // returning the exit code and an error, rather than calling os.Exit directly.
-func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validateVoucher bool, publicKeyPath string, privateKeyPath string, replayPreserveTiming bool, speed float64, useFallback bool, requireSignature bool) (int, error) {
+func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validateVoucher bool, publicKeyPath string, privateKeyPath string, useFallback bool, requireSignature bool) (int, error) {
 	if err := validateReplayFlags(speed, validateVoucher, requireSignature, publicKeyPath, useFallback, privateKeyPath); err != nil {
 		return 1, err
 	}
@@ -46,7 +46,7 @@ func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validat
 
 	if isCacheStale {
 		if useFallback {
-			return handleFallback(voucherFile, fallbackCmdToExecute, privateKeyPath, replayPreserveTiming, speed, v)
+			return handleFallback(voucherFile, fallbackCmdToExecute, privateKeyPath, v)
 		}
 		return 1, fmt.Errorf("voucher is missing, malformed, or expired, and no fallback was provided")
 	}
@@ -86,7 +86,7 @@ func loadVoucher(voucherFile string) (*voucher.Voucher, error) {
 	return &v, nil
 }
 
-func handleFallback(voucherFile string, fallbackCmdToExecute []string, privateKeyPath string, replayPreserveTiming bool, speed float64, v *voucher.Voucher) (int, error) {
+func handleFallback(voucherFile string, fallbackCmdToExecute []string, privateKeyPath string, v *voucher.Voucher) (int, error) {
 	if len(fallbackCmdToExecute) == 0 {
 		return 1, fmt.Errorf("--fallback flag used, but no command provided after '--'")
 	}
@@ -185,7 +185,7 @@ if the voucher is missing, expired, or malformed.`,
 			fallbackCmdToExecute = args[separatorIdx+1:]
 		}
 
-		exitCode, err := RunReplayCommand(voucherFile, fallbackCmdToExecute, validateVoucher, publicKeyPath, privateKeyPath, replayPreserveTiming, speed, useFallback, requireSignature)
+		exitCode, err := RunReplayCommand(voucherFile, fallbackCmdToExecute, validateVoucher, publicKeyPath, privateKeyPath, useFallback, requireSignature)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		}
@@ -194,7 +194,6 @@ if the voucher is missing, expired, or malformed.`,
 }
 
 func init() {
-	replayCmd.Flags().SetInterspersed(false)
 	replayCmd.Flags().BoolVarP(&validateVoucher, "validate", "v", false, "Verify signature and integrity before replay")
 	replayCmd.Flags().StringVarP(&publicKeyPath, "public-key", "p", "", "Path to the public key for verification")
 	replayCmd.Flags().StringVar(&privateKeyPath, "private-key", "mimic.key", "Path to the private key for re-signing on fallback")

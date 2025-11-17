@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gregory-chatelier/mimic/cmd"
@@ -14,7 +15,7 @@ import (
 
 // Helper function to capture stdout/stderr
 func captureOutput(t *testing.T, f func()) (string, string) {
-	t.Helper() // Mark this function as a test helper
+	t.Helper()
 
 	oldStdout := os.Stdout
 	oldStderr := os.Stderr
@@ -29,21 +30,34 @@ func captureOutput(t *testing.T, f func()) (string, string) {
 	os.Stdout = wOut
 	os.Stderr = wErr
 
-	f()
+	var stdoutBuf, stderrBuf bytes.Buffer
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		if _, err := io.Copy(&stdoutBuf, rOut); err != nil {
+			t.Errorf("Failed to copy stdout: %v", err)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		if _, err := io.Copy(&stderrBuf, rErr); err != nil {
+			t.Errorf("Failed to copy stderr: %v", err)
+		}
+	}()
+
+	f() // This is where the replay command is run
 
 	wOut.Close()
 	wErr.Close()
+	wg.Wait() // Wait for the readers to finish
+
 	os.Stdout = oldStdout
 	os.Stderr = oldStderr
 
-	var stdout, stderr bytes.Buffer
-	if _, err := io.Copy(&stdout, rOut); err != nil {
-		t.Fatalf("Failed to copy stdout: %v", err)
-	}
-	if _, err := io.Copy(&stderr, rErr); err != nil {
-		t.Fatalf("Failed to copy stderr: %v", err)
-	}
-	return stdout.String(), stderr.String()
+	return stdoutBuf.String(), stderrBuf.String()
 }
 
 func TestReplay(t *testing.T) {
