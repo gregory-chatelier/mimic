@@ -39,18 +39,18 @@ type CanonicalCommand struct {
 
 // CanonicalVoucher is a version of voucher.Voucher that can be deterministically marshalled.
 type CanonicalVoucher struct {
-	PreviousVoucherHash string                 `yaml:"previous_voucher_hash,omitempty"`
-	TTL                 voucher.Duration       `yaml:"ttl,omitempty"`
-	MimicVersion        string                 `yaml:"mimic_version"`
-	RecordedAt          voucher.Timestamp      `yaml:"recorded_at"`
-	DurationNs          int64                  `yaml:"duration_ns"`
-	Command             CanonicalCommand       `yaml:"command"`
-	Stdout              []voucher.OutputChunk  `yaml:"stdout,omitempty"`
-	Stderr              []voucher.OutputChunk  `yaml:"stderr,omitempty"`
-	ExitCode            int                    `yaml:"exit_code"`
-	Metadata            voucher.Metadata       `yaml:"metadata,omitempty"`
-	Signature           voucher.Signature      `yaml:"signature,omitempty"`
-	PreserveTiming      bool                   `yaml:"preserve_timing,omitempty"`
+	PreviousVoucherHash string                `yaml:"previous_voucher_hash,omitempty"`
+	TTL                 voucher.Duration      `yaml:"ttl,omitempty"`
+	MimicVersion        string                `yaml:"mimic_version"`
+	RecordedAt          voucher.Timestamp     `yaml:"recorded_at"`
+	DurationNs          int64                 `yaml:"duration_ns"`
+	Command             CanonicalCommand      `yaml:"command"`
+	Stdout              []voucher.OutputChunk `yaml:"stdout,omitempty"`
+	Stderr              []voucher.OutputChunk `yaml:"stderr,omitempty"`
+	ExitCode            int                   `yaml:"exit_code"`
+	Metadata            voucher.Metadata      `yaml:"metadata,omitempty"`
+	Signature           voucher.Signature     `yaml:"signature,omitempty"`
+	PreserveTiming      bool                  `yaml:"preserve_timing,omitempty"`
 }
 
 // GetCanonicalVoucher converts a voucher.Voucher into a CanonicalVoucher for signing.
@@ -83,7 +83,6 @@ func GetCanonicalVoucher(v voucher.Voucher) CanonicalVoucher {
 		PreserveTiming: v.PreserveTiming,
 	}
 }
-
 
 // GenerateKeyPair generates a new Ed25519 private/public key pair and saves them to the specified paths.
 func GenerateKeyPair(privateKeyPath, publicKeyPath string) error {

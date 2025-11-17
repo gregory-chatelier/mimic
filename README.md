@@ -124,6 +124,22 @@ For a full list of flags for each command, use `mimic [command] --help`.
 | :------------------ | :----------------------------------------------------------- |
 | `-o, --output`      | Output directory for the generated key pair (default: current directory). |
 
+## Handling Complex Commands (Pipes and Redirections)
+
+A crucial question is how `mimic` handles shell operators like pipes (`|`) and redirections (`>`).
+
+**The Golden Rule:** Always wrap complex commands in an explicit shell (like `bash -c "..."`).
+
+**Why?** `mimic` records the `stdout` and `stderr` of the single process it is asked to execute. Shell operators like `|` and `>` are not part of a command; they are instructions for the *shell* to connect multiple commands or redirect their output.
+
+- **Incorrect:** `mimic record -- ls | grep .md`
+  - Your current shell runs `mimic record -- ls` and pipes its output to `grep`. `mimic` only records `ls`, not the final result.
+
+- **Correct:** `mimic record -- bash -c "ls | grep .md"`
+  - `mimic` records the `bash` process. The `bash` process runs the entire pipeline (`ls | grep .md`), and `mimic` captures the final, filtered output.
+
+Using `bash -c` ensures that the entire command chain is treated as a single, atomic operation, which is exactly what you want to record for a verifiable audit.
+
 ## Examples
 
 ### Example 1: Tamper-proof auditing

@@ -111,6 +111,3 @@ func runRefreshCmd(cmd *cobra.Command, args []string) (int, error) {
 func init() {
 	refreshCmd.Flags().StringVarP(&refreshPublicKeyPath, "public-key", "p", "", "Path to the public key for verifying the original voucher (if signed)")
 }
-
-
-

@@ -140,6 +140,3 @@ func init() {
 	recordCmd.Flags().BoolVar(&preserveTiming, "preserve-timing", false, "Record time intervals between outputs")
 	recordCmd.Flags().StringArrayVar(&redactPatterns, "redact-patterns", []string{}, "Specify regex patterns to redact sensitive information from recorded environment variables (e.g., --redact-patterns \"(?i)password=.*\", \"API_KEY=.*\")")
 }
-
-
-

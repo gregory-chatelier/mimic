@@ -2,7 +2,6 @@ package cmd_test
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -106,7 +105,7 @@ exit_code: 42
 		if exitCode != 1 {
 			t.Errorf("Expected exit code 1, got %d", exitCode)
 		}
-		expectedErr := fmt.Sprintf("Voucher file not found at '%s'", missingFile)
+		expectedErr := "voucher is missing, malformed, or expired, and no fallback was provided"
 		if !strings.Contains(err.Error(), expectedErr) {
 			t.Errorf("Expected error to contain '%s', got '%s'", expectedErr, err.Error())
 		}
@@ -194,8 +193,8 @@ ttl: 1s
 		if stdout != expectedStdout {
 			t.Errorf("Expected stdout '%s', got '%s'", expectedStdout, stdout)
 		}
-		if !strings.Contains(stderr, "Voucher has expired") {
-			t.Errorf("Expected stderr to contain 'Voucher has expired', got '%s'", stderr)
+		if !strings.Contains(stderr, "Warning: voucher has expired") {
+			t.Errorf("Expected stderr to contain 'Warning: voucher has expired', got '%s'", stderr)
 		}
 		if !strings.Contains(stderr, "Cache is stale or missing. Executing fallback command:") {
 			t.Errorf("Expected stderr to contain 'Cache is stale or missing', got '%s'", stderr)

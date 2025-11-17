@@ -35,9 +35,9 @@ type Metadata struct {
 
 // Signature represents the cryptographic signature of the voucher.
 type Signature struct {
-	Algorithm    string `yaml:"algorithm,omitempty"`
-	KeyID        string `yaml:"key_id,omitempty"`
-	SignatureB64 string `yaml:"signature_b64,omitempty"`
+	Algorithm      string `yaml:"algorithm,omitempty"`
+	KeyID          string `yaml:"key_id,omitempty"`
+	SignatureB64   string `yaml:"signature_b64,omitempty"`
 	ChecksumSHA256 string `yaml:"checksum_sha256,omitempty"`
 }
 

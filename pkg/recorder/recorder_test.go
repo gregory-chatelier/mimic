@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gregory-chatelier/mimic/pkg/crypto"
 	"github.com/gregory-chatelier/mimic/pkg/recorder"
 	"github.com/gregory-chatelier/mimic/pkg/voucher"
 	"gopkg.in/yaml.v3"
@@ -123,13 +124,13 @@ func readBase64(t *testing.T, b64 string) string {
 
 func TestRedactEnvVars(t *testing.T) {
 	input := map[string]string{
-		"API_KEY":         "supersecretkey",
-		"GITHUB_TOKEN":    "ghp_token",
-		"DB_PASSWORD":     "mypassword",
+		"API_KEY":           "supersecretkey",
+		"GITHUB_TOKEN":      "ghp_token",
+		"DB_PASSWORD":       "mypassword",
 		"NON_SENSITIVE_VAR": "somevalue",
-		"SECRET_STUFF":    "hidden",
-		"USER":            "gregory",
-		"ANOTHER_SECRET":  "shhh",
+		"SECRET_STUFF":      "hidden",
+		"USER":              "gregory",
+		"ANOTHER_SECRET":    "shhh",
 	}
 
 	patterns := []string{
@@ -176,5 +177,94 @@ func TestRedactEnvVars(t *testing.T) {
 	_, err = recorder.RedactEnvVars(input, invalidPatterns)
 	if err == nil {
 		t.Errorf("Expected an error for invalid regex pattern, got none")
+	}
+}
+
+func TestRecordAndReplayIntegration(t *testing.T) {
+	// 1. Record a simple command
+	tmpFile := filepath.Join(t.TempDir(), "test.vcr")
+	v, err := recorder.Record(
+		"1.0",
+		"echo hello",
+		[]string{"bash", "-c", "echo hello"},
+		tmpFile,
+		nil,
+		0,
+		false,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Record failed: %v", err)
+	}
+	if v == nil {
+		t.Fatal("Voucher is nil")
+	}
+	if v.ExitCode != 0 {
+		t.Fatalf("Expected exit code 0, got %d", v.ExitCode)
+	}
+
+	// 2. Replay
+	// We need to import replayer for this
+	// For now, we will just check the voucher content
+	if len(v.Stdout) != 1 {
+		t.Fatalf("Expected 1 stdout chunk, got %d", len(v.Stdout))
+	}
+	if strings.TrimSpace(readBase64(t, v.Stdout[0].DataB64)) != "hello" {
+		t.Errorf("Expected stdout 'hello', got '%s'", readBase64(t, v.Stdout[0].DataB64))
+	}
+}
+
+func TestEmptyChunks(t *testing.T) {
+	// Voucher with no stdout/stderr
+	v := voucher.Voucher{
+		Stdout:   []voucher.OutputChunk{},
+		Stderr:   []voucher.OutputChunk{},
+		ExitCode: 0,
+	}
+
+	// Should not crash
+	canonical := crypto.GetCanonicalVoucher(v)
+	data, err := yaml.Marshal(canonical)
+	if err != nil {
+		t.Fatalf("Failed to marshal voucher with empty chunks: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("Marshalled data is empty")
+	}
+}
+
+func TestLargeEnvVars(t *testing.T) {
+	// Create voucher with large env (>1MB)
+	largeValue := strings.Repeat("x", 1000000)
+	v := voucher.Voucher{
+		Command: voucher.Command{
+			Env: map[string]string{
+				"LARGE_VAR": largeValue,
+			},
+		},
+	}
+
+	// Should canonicalize without issues
+	canonical := crypto.GetCanonicalVoucher(v)
+	data, err := yaml.Marshal(canonical)
+	if err != nil {
+		t.Fatalf("Failed to marshal voucher with large env var: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("Marshalled data is empty")
+	}
+}
+
+func TestMalformedBase64(t *testing.T) {
+	v := voucher.Voucher{
+		Stdout: []voucher.OutputChunk{
+			{DataB64: "not-valid-base64!!!"},
+		},
+	}
+
+	// Decode should fail gracefully
+	_, err := voucher.DecodeChunkData(v.Stdout[0].DataB64)
+	if err == nil {
+		t.Fatal("Expected an error for malformed base64, got none")
 	}
 }

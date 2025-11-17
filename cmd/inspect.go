@@ -84,5 +84,3 @@ func runInspectCmd(cmd *cobra.Command, args []string) (int, error) {
 	}
 	return 0, nil
 }
-
-
