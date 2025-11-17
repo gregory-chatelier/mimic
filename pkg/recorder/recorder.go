@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
 	"regexp"
 	"strings"
 	"sync"
@@ -61,7 +62,7 @@ func executeCommand(cmd *exec.Cmd) (int, time.Duration, error) {
 	return exitCode, duration, nil
 }
 
-func buildVoucher(mimicVersion, rawCommand string, command []string, cwd string, envMap map[string]string, stdoutChunks, stderrChunks []voucher.OutputChunk, exitCode int, duration time.Duration, ttl time.Duration, preserveTiming bool, finalOutputHash string) *voucher.Voucher {
+func buildVoucher(mimicVersion, rawCommand string, command []string, cwd string, envMap map[string]string, stdoutChunks, stderrChunks []voucher.OutputChunk, exitCode int, duration time.Duration, ttl time.Duration, preserveTiming bool, finalOutputHash, hostname, username string) *voucher.Voucher {
 	return &voucher.Voucher{
 		MimicVersion: mimicVersion,
 		RecordedAt:   time.Now(),
@@ -79,6 +80,8 @@ func buildVoucher(mimicVersion, rawCommand string, command []string, cwd string,
 		PreserveTiming: preserveTiming,
 		Metadata: voucher.Metadata{
 			SHA256Output: finalOutputHash,
+			Hostname:     hostname,
+			User:         username,
 		},
 	}
 }
@@ -135,7 +138,19 @@ func Record(mimicVersion string, rawCommand string, command []string, outputFile
 	}
 
 	finalOutputHash := hex.EncodeToString(outputHasher.Sum(nil))
-	v := buildVoucher(mimicVersion, rawCommand, command, cmd.Dir, envMap, stdoutChunks, stderrChunks, exitCode, duration, ttl, preserveTiming, finalOutputHash)
+
+	// Get hostname and user information
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown"
+	}
+	currentUser, err := user.Current()
+	username := "unknown"
+	if err == nil {
+		username = currentUser.Username
+	}
+
+	v := buildVoucher(mimicVersion, rawCommand, command, cmd.Dir, envMap, stdoutChunks, stderrChunks, exitCode, duration, ttl, preserveTiming, finalOutputHash, hostname, username)
 
 	data, err := yaml.Marshal(v)
 	if err != nil {

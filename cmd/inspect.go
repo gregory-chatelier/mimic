@@ -59,6 +59,13 @@ func runInspectCmd(cmd *cobra.Command, args []string) (int, error) {
 		fmt.Printf("Duration: 0s\n") // Or "<1ns" if we want to be super precise for 0
 	}
 
+	if v.Metadata.User != "" {
+		fmt.Printf("User: %s\n", v.Metadata.User)
+	}
+	if v.Metadata.Hostname != "" {
+		fmt.Printf("Hostname: %s\n", v.Metadata.Hostname)
+	}
+
 	if len(v.Command.Env) > 0 {
 		fmt.Println("Environment:")
 		for k, val := range v.Command.Env {

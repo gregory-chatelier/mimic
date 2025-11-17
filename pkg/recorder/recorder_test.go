@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,6 +28,18 @@ func TestRecord(t *testing.T) {
 
 	if voucher1 == nil {
 		t.Fatal("Voucher is nil")
+	}
+
+	// Check metadata
+	expectedHostname, _ := os.Hostname()
+	currentUser, _ := user.Current()
+	expectedUsername := currentUser.Username
+
+	if voucher1.Metadata.Hostname != expectedHostname {
+		t.Errorf("Expected hostname '%s', got '%s'", expectedHostname, voucher1.Metadata.Hostname)
+	}
+	if voucher1.Metadata.User != expectedUsername {
+		t.Errorf("Expected user '%s', got '%s'", expectedUsername, voucher1.Metadata.User)
 	}
 
 	if voucher1.ExitCode != 0 {
