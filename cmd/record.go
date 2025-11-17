@@ -98,7 +98,8 @@ func runRecordCmd(cmd *cobra.Command, args []string) (int, error) {
 	)
 
 	if durationTTL != 0 && (durationTTL < MinTTL || durationTTL > MaxTTL) {
-		return 1, fmt.Errorf("TTL must be between %v and %v (or 0 for no expiration)", MinTTL, MaxTTL)
+		maxTTLDays := MaxTTL / (24 * time.Hour)
+		return 1, fmt.Errorf("TTL must be between %v and %d days (or 0 for no expiration)", MinTTL, maxTTLDays)
 	}
 
 	v, err := recorder.Record(version, rawCommandString, cmdToRecord, outputFile, envVarsToCapture, durationTTL, preserveTiming, redactPatterns)
