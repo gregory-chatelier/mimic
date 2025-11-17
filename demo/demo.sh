@@ -15,6 +15,7 @@ wait_for_keypress() {
         echo -n "Press any key to continue..."
         read -n 1 -s
         echo ""
+        clear
     fi
 }
 
@@ -102,43 +103,8 @@ echo "<<< Command finished."
 
 wait_for_keypress
 
-# 10. Record a command with TTL and refresh it
-echo "\n--- 10. Recording a command with a short TTL (1s) ---"
-echo "\n>>> Running: ./$APP_NAME record -o $DEMO_DIR/short_ttl.vcr --ttl 1s -- echo 'This voucher will expire soon'"
-"$APP_NAME" record -o "$DEMO_DIR/short_ttl.vcr" --ttl 1s -- echo 'This voucher will expire soon'
-echo "<<< Command finished."
-echo "\n>>> Running: ./$APP_NAME inspect $DEMO_DIR/short_ttl.vcr"
-"$APP_NAME" inspect "$DEMO_DIR/short_ttl.vcr"
-echo "<<< Command finished."
-
-wait_for_keypress
-
-echo "\n--- 10b. Waiting for 2 seconds for the voucher to expire ---"
-echo "\n>>> Running: sleep 2"
-sleep 2
-echo "<<< Command finished."
-
-wait_for_keypress
-
-echo "\n--- 10c. Attempting to replay expired voucher (should fail with --validate) ---"
-echo "\n>>> Running: ./$APP_NAME replay --validate --public-key $DEMO_DIR/mimic.pub $DEMO_DIR/short_ttl.vcr || echo 'Replay of expired voucher failed as expected.'"
-"$APP_NAME" replay --validate --public-key "$DEMO_DIR/mimic.pub" "$DEMO_DIR/short_ttl.vcr" || echo 'Replay of expired voucher failed as expected.'
-echo "<<< Command finished."
-
-wait_for_keypress
-
-echo "\n--- 10d. Refreshing the expired voucher ---"
-echo "\n>>> Running: ./$APP_NAME refresh $DEMO_DIR/short_ttl.vcr"
-"$APP_NAME" refresh "$DEMO_DIR/short_ttl.vcr"
-echo "<<< Command finished."
-echo "\n>>> Running: ./$APP_NAME inspect $DEMO_DIR/short_ttl.vcr"
-"$APP_NAME" inspect "$DEMO_DIR/short_ttl.vcr"
-echo "<<< Command finished."
-
-wait_for_keypress
-
-# 11. Record a command with all environment variables
-echo "\n--- 11. Record a command with all environment variables ---"
+# 10. Record a command with all environment variables
+echo "\n--- 10. Record a command with all environment variables ---"
 echo "\n>>> Setting test environment variable: MY_CUSTOM_VAR"
 export MY_CUSTOM_VAR="This is a test"
 echo "\n>>> Running: $APP_NAME record -o $DEMO_DIR/env_test.vcr -- bash -c 'echo \"My custom var: $MY_CUSTOM_VAR\"'"
@@ -150,16 +116,16 @@ echo "<<< Command finished. Note that MY_CUSTOM_VAR and all other env vars are r
 
 wait_for_keypress
 
-echo "\n--- 11b. Replaying the command with environment variables ---"
-echo "\n>>> Running: $APP_NAME replay $DEMO_DIR/env_test.vcr"
-"$APP_NAME" replay "$DEMO_DIR/env_test.vcr"
+echo "\n--- 10b. Inspecting the command (to confirm env vars) ---"
+echo "\n>>> Running: $APP_NAME inspect $DEMO_DIR/env_test.vcr"
+"$APP_NAME" inspect "$DEMO_DIR/env_test.vcr"
 echo "<<< Command finished."
 unset MY_CUSTOM_VAR
 
 wait_for_keypress
 
-# 12. Automatic Caching and Fallback (The High-Value Feature)
-echo "\n--- 12. Automatic Caching and Fallback ---"
+# 11. Automatic Caching and Fallback (The High-Value Feature)
+echo "\n--- 11. Automatic Caching and Fallback ---"
 
 # Clean up the specific voucher file first
 echo "\n>>> Running: rm -f $DEMO_DIR/cache_test.vcr"
@@ -168,10 +134,10 @@ echo "<<< Command finished."
 
 wait_for_keypress
 
-# 12a. First run: Cache miss, executes fallback, records new voucher
-echo "\n--- 12a. First run: Cache Miss (Voucher missing) ---"
-echo "\n>>> Running: ./$APP_NAME replay $DEMO_DIR/cache_test.vcr --fallback -- echo 'LIVE RUN: Cache was missing, now recorded.'"
-"$APP_NAME" replay "$DEMO_DIR/cache_test.vcr" --fallback -- echo 'LIVE RUN: Cache was missing, now recorded.'
+# 11a. First run: Cache miss, executes fallback, records new voucher
+echo "\n--- 11a. First run: Cache Miss (Voucher missing) ---"
+echo "\n>>> Running: ./$APP_NAME replay --fallback --private-key $DEMO_DIR/mimic.key $DEMO_DIR/cache_test.vcr -- echo 'LIVE RUN: Cache was missing, now recorded.'"
+"$APP_NAME" replay --fallback --private-key "$DEMO_DIR/mimic.key" "$DEMO_DIR/cache_test.vcr" -- echo 'LIVE RUN: Cache was missing, now recorded.'
 echo "<<< Command finished."
 echo "\n>>> Running: ./$APP_NAME inspect $DEMO_DIR/cache_test.vcr"
 "$APP_NAME" inspect "$DEMO_DIR/cache_test.vcr"
@@ -179,24 +145,24 @@ echo "<<< Command finished."
 
 wait_for_keypress
 
-# 12b. Second run: Cache hit, replays instantly
-echo "\n--- 12b. Second run: Cache Hit (Replays instantly) ---"
-echo "\n>>> Running: ./$APP_NAME replay $DEMO_DIR/cache_test.vcr --fallback -- echo 'LIVE RUN: Cache was missing, now recorded.'"
-"$APP_NAME" replay "$DEMO_DIR/cache_test.vcr" --fallback -- echo 'LIVE RUN: Cache was missing, now recorded.'
+# 11b. Second run: Cache hit, replays instantly
+echo "\n--- 11b. Second run: Cache Hit (Replays instantly) ---"
+echo "\n>>> Running: ./$APP_NAME replay --fallback --private-key $DEMO_DIR/mimic.key $DEMO_DIR/cache_test.vcr -- echo 'LIVE RUN: Cache was missing, now recorded.'"
+"$APP_NAME" replay --fallback --private-key "$DEMO_DIR/mimic.key" "$DEMO_DIR/cache_test.vcr" -- echo 'LIVE RUN: Cache was missing, now recorded.'
 echo "<<< Command finished."
 
 wait_for_keypress
 
-# 12c. Third run: Cache stale (TTL expired), executes fallback, refreshes cache
-echo "\n--- 12c. Third run: Cache Stale (TTL expired) ---"
-echo "\n>>> Running: ./$APP_NAME record -o $DEMO_DIR/stale_cache.vcr --ttl 1s -- echo 'STALE: This is the old cache.'"
-"$APP_NAME" record -o "$DEMO_DIR/stale_cache.vcr" --ttl 1s -- echo 'STALE: This is the old cache.'
+# 11c. Third run: Cache stale (TTL expired), executes fallback, refreshes cache
+echo "\n--- 11c. Third run: Cache Stale (TTL expired) ---"
+echo "\n>>> Running: ./$APP_NAME record -o $DEMO_DIR/stale_cache.vcr --ttl 1m -- echo 'STALE: This is the old cache.'"
+"$APP_NAME" record -o "$DEMO_DIR/stale_cache.vcr" --ttl 1m -- echo 'STALE: This is the old cache.'
 echo "<<< Command finished."
-echo "\n>>> Running: sleep 2"
-sleep 2
+echo "\n>>> Running: sleep 61"
+sleep 61
 echo "<<< Command finished."
-echo "\n>>> Running: ./$APP_NAME replay $DEMO_DIR/stale_cache.vcr --validate --fallback -- echo 'LIVE RUN: Cache was stale, now refreshed.'"
-"$APP_NAME" replay "$DEMO_DIR/stale_cache.vcr" --validate --fallback -- echo 'LIVE RUN: Cache was stale, now refreshed.'
+echo "\n>>> Running: ./$APP_NAME replay --validate --fallback --private-key $DEMO_DIR/mimic.key --public-key $DEMO_DIR/mimic.pub $DEMO_DIR/stale_cache.vcr -- echo 'LIVE RUN: Cache was stale, now refreshed.'"
+"$APP_NAME" replay --validate --fallback --private-key "$DEMO_DIR/mimic.key" --public-key "$DEMO_DIR/mimic.pub" "$DEMO_DIR/stale_cache.vcr" -- echo 'LIVE RUN: Cache was stale, now refreshed.'
 echo "<<< Command finished."
 echo "\n>>> Running: ./$APP_NAME inspect $DEMO_DIR/stale_cache.vcr"
 "$APP_NAME" inspect "$DEMO_DIR/stale_cache.vcr"
@@ -204,8 +170,8 @@ echo "<<< Command finished."
 
 wait_for_keypress
 
-# 13. Record with selective environment variables
-echo "\n--- 13. Recording with selective environment variables ---"
+# 12. Record with selective environment variables
+echo "\n--- 12. Recording with selective environment variables ---"
 echo "\n>>> Setting test environment variables: MIMIC_USER, MIMIC_TOKEN, MIMIC_HOST"
 export MIMIC_USER="test-user"
 export MIMIC_TOKEN="secret-token-123"
@@ -220,8 +186,8 @@ unset MIMIC_USER MIMIC_TOKEN MIMIC_HOST
 
 wait_for_keypress
 
-# 14. Record with environment variable redaction
-echo "\n--- 14. Recording with environment variable redaction ---"
+# 13. Record with environment variable redaction
+echo "\n--- 13. Recording with environment variable redaction ---"
 echo "\n>>> Setting sensitive environment variable: API_KEY"
 export API_KEY="abc-123-xyz-789"
 echo "\n>>> Running: $APP_NAME record -o $DEMO_DIR/redacted_env.vcr --env-vars API_KEY --redact-patterns \"abc-123-xyz-789\" -- bash -c 'echo \"Using API Key: $API_KEY\"'"
@@ -233,11 +199,46 @@ echo "<<< Command finished. Note that the API_KEY value is redacted in the vouch
 
 wait_for_keypress
 
-echo "\n--- 14b. Replaying the command with redacted env ---"
+echo "\n--- 13b. Replaying the command (note the redacted environment) ---"
 echo "\n>>> Running: $APP_NAME replay $DEMO_DIR/redacted_env.vcr"
 "$APP_NAME" replay "$DEMO_DIR/redacted_env.vcr"
 echo "<<< Command finished. Note that the replayed output is still the original, unredacted value."
 unset API_KEY
+
+wait_for_keypress
+
+# 14. Record a command with TTL and refresh it
+echo "\n--- 14. Recording a command with a short TTL (1m) ---"
+echo "\n>>> Running: ./$APP_NAME record -o $DEMO_DIR/short_ttl.vcr --ttl 1m -- echo 'This voucher will expire soon'"
+"$APP_NAME" record -o "$DEMO_DIR/short_ttl.vcr" --ttl 1m -- echo 'This voucher will expire soon'
+echo "<<< Command finished."
+echo "\n>>> Running: ./$APP_NAME inspect $DEMO_DIR/short_ttl.vcr"
+"$APP_NAME" inspect "$DEMO_DIR/short_ttl.vcr"
+echo "<<< Command finished."
+
+wait_for_keypress
+
+echo "\n--- 14b. Waiting for >1 minute for the voucher to expire ---"
+echo "\n>>> Running: sleep 61"
+sleep 61
+echo "<<< Command finished."
+
+wait_for_keypress
+
+echo "\n--- 14c. Attempting to replay expired voucher (should fail with --validate) ---"
+echo "\n>>> Running: ./$APP_NAME replay --validate --public-key $DEMO_DIR/mimic.pub $DEMO_DIR/short_ttl.vcr || echo 'Replay of expired voucher failed as expected.'"
+"$APP_NAME" replay --validate --public-key "$DEMO_DIR/mimic.pub" "$DEMO_DIR/short_ttl.vcr" || echo 'Replay of expired voucher failed as expected.'
+echo "<<< Command finished."
+
+wait_for_keypress
+
+echo "\n--- 14d. Refreshing the expired voucher ---"
+echo "\n>>> Running: ./$APP_NAME refresh $DEMO_DIR/short_ttl.vcr"
+"$APP_NAME" refresh "$DEMO_DIR/short_ttl.vcr"
+echo "<<< Command finished."
+echo "\n>>> Running: ./$APP_NAME inspect $DEMO_DIR/short_ttl.vcr"
+"$APP_NAME" inspect "$DEMO_DIR/short_ttl.vcr"
+echo "<<< Command finished."
 
 wait_for_keypress
 

@@ -193,8 +193,8 @@ ttl: 1s
 		if stdout != expectedStdout {
 			t.Errorf("Expected stdout '%s', got '%s'", expectedStdout, stdout)
 		}
-		if !strings.Contains(stderr, "Warning: voucher has expired") {
-			t.Errorf("Expected stderr to contain 'Warning: voucher has expired', got '%s'", stderr)
+		if !strings.Contains(stderr, "Warning: validation failed (voucher has expired") {
+			t.Errorf("Expected stderr to contain 'Warning: validation failed (voucher has expired', got '%s'", stderr)
 		}
 		if !strings.Contains(stderr, "Cache is stale or missing. Executing fallback command:") {
 			t.Errorf("Expected stderr to contain 'Cache is stale or missing', got '%s'", stderr)

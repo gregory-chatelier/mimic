@@ -39,12 +39,8 @@ func RunReplayCommand(voucherFile string, fallbackCmdToExecute []string, validat
 
 	if (validateVoucher || requireSignature) && !isCacheStale {
 		if err := crypto.VerifyVoucherIntegrity(v, publicKeyPath); err != nil {
-			if strings.Contains(err.Error(), "voucher has expired") {
-				isCacheStale = true
-				fmt.Fprintf(os.Stderr, "Warning: %v. Treating as cache stale.\n", err)
-			} else {
-				return 1, fmt.Errorf("security validation failed: %w", err)
-			}
+			isCacheStale = true
+			fmt.Fprintf(os.Stderr, "Warning: validation failed (%v). Treating as cache stale.\n", err)
 		}
 	}
 
@@ -198,8 +194,10 @@ if the voucher is missing, expired, or malformed.`,
 }
 
 func init() {
+	replayCmd.Flags().SetInterspersed(false)
 	replayCmd.Flags().BoolVarP(&validateVoucher, "validate", "v", false, "Verify signature and integrity before replay")
 	replayCmd.Flags().StringVarP(&publicKeyPath, "public-key", "p", "", "Path to the public key for verification")
+	replayCmd.Flags().StringVar(&privateKeyPath, "private-key", "mimic.key", "Path to the private key for re-signing on fallback")
 	replayCmd.Flags().BoolVarP(&replayPreserveTiming, "preserve-timing", "t", false, "Simulate original timing delays")
 	replayCmd.Flags().Float64VarP(&speed, "speed", "s", 1.0, "Adjust playback speed (e.g., 0.5 to slow down, 2.0 to speed up)")
 	replayCmd.Flags().BoolVar(&useFallback, "fallback", false, "Execute real command to refresh cache if voucher is missing or invalid")
